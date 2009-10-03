@@ -30,8 +30,16 @@ For agent to work you need following libraries on your classpath:
   * _commons-collections_ (commons-collections-3.2.1.jar is included in this library),
   * _asm_ (asm-3.2.jar, asm-commons-3.2.jar are always needed and are included, if you are needing to debug Coroutines down to asm level you may use asm-debug-all-3.2.jar instead, which is also included. If you happen to use: print - then you will need additionally asm-util-3.2.jar; preverify or postverify - asm-util-3.2.jar, asm-analysis-3.2.ajr, asm-tree-3.2.jar - all included)
 
-To write any coroutine you also need coroutine user library (coroutines_user_xxx.jar) to be found on classpath
+To write any coroutine you also need coroutine user library (coroutines_user_xxx.jar) to be found on classpath.
+
+To use generated coroutines some run-time generated classes are also needed. All such classes are created on disk under directory passed in mr.go.coroutines.ClassgenPath system property. You must have this directory in your classpath also. 
 
 == Java version ==
 
 Coroutines are meant to work only for Java 6 code. No plans to support earlier versions are made (this is mainly due to disallowance of _jsr_ and _ret_ instructions and stack map tables). All instrumentation made by this library have to be pass new class verification (you may safely use -XX:-FailOverToOldVerifier) as outlined in JSR-202
+
+== Logging ==
+
+This library uses JDK logging in following fashion: 
+  * informational messages about instrumentation process are logged by mr.go.coroutines.ClassTransformer, mr.go.coroutines.CoroutineInstrumentator and mr.go.coroutines.ClassAnalyzer loggers - mostly FINEST and FINER levels, these loggers are also used for reporting warnings if instrumentation cannot be, for some reason, completed - WARNING level, if unexpected exception was thrown when instrumenting, also SEVERE
+  * if _debug_ option is specified additional loggers are used to trace coroutine execution, one per instrumented class. Tracing logger is named after fully qualified name of instrumented class. All information about coroutine state is logged on FINER and FINEST levels
