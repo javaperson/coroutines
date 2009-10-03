@@ -1,0 +1,18 @@
+#summary User guide
+
+<wiki:toc max_depth="2"/>
+
+= How to use? =
+
+At the heart of Coroutine library lies Java agent that performs bytecode instrumentation providing coroutine semantics support. This agent, along with all needed classes, is located in  *coroutines.jar*. To use coroutines in your project you need to tell JVM to use the agent. This is done by passing following option to JVM:
+  -javaagent:<path to coroutines.jar>=[agent options]
+, where _agent options_ are either:
+  runtime[-options] (1)
+or:
+  <classname>[-options](;<classname>[-options])*[;-options] (2)
+
+The former form (1) tells coroutine agent to look for classes using coroutines during classloading. The latter form (2) specifies list of classes for which you need coroutine support explicitly, so lookup is not needed. This is slightly faster, so if you are concerned with class loading speed use this form.
+
+== Options ==
+
+Options modify the behavior of agent. All options, as seen above, are preceded by '-' character. If you use form (2) options after all class names  (after the last ';') are considered global (applied for all classes), and options after a class name are in effect only for preceding class.
