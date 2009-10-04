@@ -49,7 +49,7 @@ The real problem in implementing verifiable coroutine code lies in maintaining a
 
 Stack map tables are furthermore vital to perform certain optimizations. See [#Optimizations].
 
-It is not certain currently that transformations described here are valid for _every_ valid Java 6 code. The ultimate goal is to correct all emerging bugs.
+It is not certain currently that transformations described here are valid for _every_ valid Java 6 code. The ultimate goal is to correct all emerging bugs. If you came across a code that's unverifiable you may try _overrideframes_ option. This option undoes above algorithm and uses ASM ClassWriter that tries to compute _stack map table_ using its algorithm. While this is clearly bug, it sometimes helps to get things going before bug is fixed. Using this option induces a small performance price because ASM algorithm needs to be generic while coroutines instrumentation layer is able to reuse information which compiler produced with only slight modifications when needed.
 
 == Exception handlers ==
 
