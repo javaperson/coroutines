@@ -22,7 +22,7 @@ All options are preceded by '-' character. If you use (2) options after all clas
   * outputbin: outputs instrumented class file in the JVM class file format. The class file is created in directory passed in `mr.go.coroutines.ClassgenPath` system property (default is current directory).  Directory chain representing class packaging is created. File is named after instrumented class + 'Instrumented' with  standard .class extension appended (classfile for `com.acme.MyClass` can be found at `com/acme/MyClassInstrumented.class` in `ClassgenPath`),
   * preverify: (advanced) uses ASM verifier in process of instrumenting. Used for debugging only,
   * postverify: (advanced) verifies whole instrumented class after instrumentation. Used for debugging only,
-  * overrideframes: "last chance option" - sometimes it happens that instrumented code is not passing Java verification stage because of applied instrumentation. This has almost always been result of a bug in the Coroutine library. While you are encouraged to file a bug in such case, you may need to get something done quickly without waiting for this to be fixed. Sometimes specifying `overrideframes` helps and code passes verification (mostly if generated code has inconsistent stack map tables). See [Internals#Stack_map_tables] for detailed information of what this switch does.
+  * overrideframes: "last chance option" - sometimes it happens that instrumented code is not passing Java verification stage because of applied instrumentation. This has almost always been result of a bug in the Coroutine library. While you are encouraged to file a bug in such case, you may need to get something done quickly without waiting for this to be fixed. Sometimes specifying `overrideframes` helps and code passes verification (mostly if generated code has inconsistent stack map tables). See [Internals#Stack_map_table] for detailed information of what this switch does.
 
 == Examples ==
 
@@ -54,7 +54,7 @@ To use generated coroutines some run-time generated classes are also needed. All
 
 == Java version ==
 
-Coroutines are meant to work only with Java 6 code. No plans to support earlier versions are made (this is mainly due to disallowance of _jsr_ and _ret_ instructions and stack map tables). All instrumentations made by this library have to pass new class verification (you may safely use -XX:-FailOverToOldVerifier) as outlined in JSR-202
+Coroutines are meant to work only with Java 6 code. No plans to support earlier versions are made (this is mainly due to disallowance of _jsr_ and _ret_ instructions and stack map tables). All instrumentations made by this library have to pass new class verification (you may safely use `-XX:-FailOverToOldVerifier`) as outlined in JSR-202
 
 == Logging ==
 
