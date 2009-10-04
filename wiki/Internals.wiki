@@ -49,12 +49,17 @@ The real problem in implementing verifiable coroutine code lies in maintaining a
 
 Stack map tables are furthermore vital to perform certain optimizations. See [#Optimizations].
 
-It is not certain currently that transformations described here are valid for _every_ valid Java 6 code. The ultimate goal is to correct all emerging bugs. If you came across a code that's unverifiable you may try _overrideframes_ option. This option undoes above algorithm and uses ASM ClassWriter that tries to compute _stack map table_ using its algorithm. While this is clearly bug, it sometimes helps to get things going before bug is fixed. Using this option induces a small performance price because ASM algorithm needs to be generic while coroutines instrumentation layer is able to reuse information which compiler produced with only slight modifications when needed.
+It is not certain currently that transformations described here are valid for _every_ valid Java 6 code. The ultimate goal is to correct all emerging bugs. If you came across a code that's unverifiable you may try _overrideframes_ option. This option undoes above algorithm and uses ASM ClassWriter that tries to compute _stack map table_ using its algorithm. It sometimes helps to get things going before bug is fixed. Using this option induces performance price because ASM algorithm needs to be generic while coroutines instrumentation layer is able to reuse information which compiler produced with only slight modifications when needed.
 
 == Exception handlers ==
 
 If _yield_ is encountered in the middle of a try-catch block it poses certain problem when it comes to _stack map tables_. It is required that every handler of a try-catch block is accompanied with valid stack map and every instruction within try-catch block must be valid with respect to handler's map. that effectively requires modification of original handler's map so that it does not take local variables of original method into account, because there is no guarantee that they have been properly restored before exception occurred. But such modification makes exception handler code unverifiable, because all original local variables are deemed uninitialized by the Java verifier. To overcome the problem code that restores all active variables is required at the beginning of handler code. Modification of handler's map causes yet another change to _deltas_ of following maps, so the next map has to be merged using _frame merging_ algorithm.
 
 To handle try-catch blocks additional data structure describing these blocks is maintained during instrumentation. It holds addresses of block start, end and handler code along with list of variables that were initialized before a block started (as they are the only variables that can be used in the handler). If _yield_ is detected within try-catch block it is flagged and all procedures mentioned in the first paragraph are carried out on handler's entry.
+
+== Stub method ==
+
+After coroutine's 'real' method has been completed original method is changed to _coroutine stub_. Using information obtained during instrumentation stage agent is able to create `CoIterator` implementation which is bound to freshly transformed method. `CoIterator` is written to disk in form of a class file and instantiated in stub method. Stub creates also unique `Frame` instance which it then passes to `CoIterator` and emits logging code in debug mode. `Frame` is initialized with local arguments and _this_ reference (if the method is not static). Stub returns `CoIterator` to the caller.
+
 
 = Optimizations =
