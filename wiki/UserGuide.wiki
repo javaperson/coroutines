@@ -28,7 +28,7 @@ All options are preceded by '-' character. If you use (2) options after all clas
 
   `javaagent:coroutines.jar=com.acme.MyClass1;com.acme.MyClass2`
 
-Instruments two classes when when they are being loaded
+Instruments two classes
 
   `javaagent:coroutines.jar=com.acme.MyClass1;com.acme.MyClass2;-outputbin`
 
