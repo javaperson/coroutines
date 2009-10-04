@@ -73,7 +73,7 @@ Stack map provides 'block' information - which variable goes out of scope and wh
 
 Variable is assumed to be in one of the three states: temporary, initialized and final. Every store instruction makes variable initialized and not final. Every initialized occurrence of variable in _stack map table_ makes it not temporary. Every uninitialized occurrence makes it uninitialized. If not temporary variable is copied to `Frame` it becomes final from now on. Only variables which are not final and initialized need to be copied to `Frame` before _yield_. At the beginning of a method its actual arguments are considered not temporary and final.
 
-Let's see how it works in practice. We are going to examine grep cporoutine. The code below has marked all places in the code where stack map table information is present
+Let's see how it works in practice. We are going to examine grep coroutine. In the code listing presented below all places where stack map table information is present are marked
 {{{
 	@Coroutine
 	public static CoIterator<String, Void> grep(String pattern, String file)
