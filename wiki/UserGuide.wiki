@@ -125,6 +125,44 @@ Coroutines very often _yield_ from some form of never-ending loop. The most clas
 	}
 }}}
 
-In such cases it is up to the caller to _close_ coroutine, as coroutine by itself can execute endlessly. But what is maybe more important than caller considerations is the fact that most (all?) Java compilers do not enforce that method must contain return statement in such cases, being content with information, obtained from static analysis, that this code will execute forever. But there are numerous examples when coroutine in fact returns. Take grep - it obviously produces finite stream of results. 
+In such cases it is up to the caller to _close_ coroutine, as coroutine by itself can execute endlessly. But what is maybe more important than caller considerations, is the fact that most (all?) Java compilers do not enforce that such method must contain return statement in such cases, being content with information, obtained from static analysis, that this code will execute forever. But there are numerous examples when coroutine in fact returns. Take grep - it obviously produces finite stream of results. Java compiler will not accept such method without return statement. Being forced to return an instance of `CoIterator` interface, which has no user-visible implementations and it is quite impossible to provide one without overdoing this library's work, you are left with only two real choices - to return `null` or to throw an exception. Either choice will inevitably end up in somehow awkward-looking code. To fix that special _ `_ method` _ has been introduced. You are not forced to use it in any way. In fact ALL return statements in your code are transformed under the hood into `NoSuchElementException` so it does not really mater which option you will choose. But I found that it is convenient to have such 'special' method to indicate coroutine exit (instrumentation basically changes all occurrences of _ `_ method` _ to kind of no-op)
 
 == Coroutine annotation ==
+
+Coroutine annotation has two flags.
+
+The first is `generator` flag. By default it is set to be true. If set to false the annotated coroutine is executed before `CoIterator` is returned to its caller. This has the obvious effect of resuming execution on first encountered _yield_ (as if caller executed _next_). It may come handy when coroutine does not generate anything (at least on its first call), but rather waits for caller to _send_ something. Consider famous telegram receiver problem, which is considered to be a showcase for coroutines (taken from [http://www.amazon.com/Coroutines-Programming-Methodology-Implementation-ebook/dp/B0014D4QVQ Coroutines: A Programming Methodology, a Language Design and an Implementation] by Christopher Marlin, you can find this example in [http://books.google.com/books?id=bIAxhJor1EYC&pg=PP1#v=onepage&q=&f=false Google Books edition], page 14). Brief: write a program which processes stream of telegraphs, consisting of words terminated by STOP. If you receive ZZZZZ then telegraph has ended. EOT is on empty telegraph (with no words). Upon end print summary report of received telegraphs containing: text of telegraph, number of chargeable words (all words except ZZZZZ and STOP are chargeable), flag signaling over-length words (length of word > 12). Simple solution will use coroutine for state machine part of problem and some external feed of incoming strings. We might write following solution
+{{{
+	@Coroutine(generator = false)
+	public CoIterator<Void, String> receiver(List<Telegram> telegrams) {
+		Telegram t;
+		int wordCount = 0;
+		boolean hasOverlengthWord = false;
+		StringBuilder msg = new StringBuilder();
+		while (true) {
+			String part = yield();
+			if (part.equals(DELIMITER)) {
+				if (wordCount == 0) {
+					return _();
+				}
+				t = new Telegram(msg.toString(), wordCount, hasOverlengthWord);
+				telegrams.add(t);
+				msg = new StringBuilder();
+				wordCount = 0;
+				hasOverlengthWord = false;
+			} else if (part.equals("STOP")) {
+				msg.append(' ');
+			} else {
+				if (part.length() > maxLength) {
+					hasOverlengthWord = true;
+					part = part.substring(0, 11);
+				}
+				wordCount += 1;
+				msg.append(part);
+			}
+		}
+	}
+}}}
+We could live without `generator` flag, but then our feed component would be required to call _next_ before _send_ just to execute coroutine up to the _yield_, so that it can be resumed with sent value. `Generator` flag can be set to false to eliminate such calls from user code, it automatically calls _next_ by itself, so caller does not need to bother and may start sending values right away. As the name of the flag indicates, you should not generate anything useful on the first call, as that value is effectively lost.
+
+The second flag is `threadLocal` flag. This flag indicated that one `CoIterator` will be reused by many threads. Each thread then receives its own coroutine state and they can freely reuse coroutine without worrying about state inconsistencies.
