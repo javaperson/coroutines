@@ -105,7 +105,7 @@ Let's see how it works in practice. We are going to examine grep coroutine. In t
 
 Stack map 1 marks `freader`, `reader`, `line` and `regex` as not temporary. They are initialized as well because of assignments except for `line` which is uninitialized currently. `File` and `pattern` are final because they are actual arguments of this method.
 
-At (1) yield takes place. All non final variables are copied (`line` has become initialized at this point) because all local variables are not final, except method arguments so there is no need to copy them. All variables except `isFound` have been not temporary at the time of yield so they become final right after.
+At (1) yield takes place. All local variables except method arguments must be copied (`line` has become initialized at this point) because all local variables are not final. There is no need to copy arguments. All variables except `isFound` have been not temporary at the time of yield so they become final right after.
 
 At Stack map 2 `line` and `isFound` go out of scope.
 
