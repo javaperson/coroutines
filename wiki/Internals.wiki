@@ -31,10 +31,13 @@ if (chkexit) throw closed;
 }}}
 
 *Preamble* creates two additional local variables holding coroutine current state and an array of original local variables and their current values. Next, it checks whether state is equal to -1, if it is that means that coroutine have been closed and `CoroutineClosedException` is thrown. Then it finds an instruction where execution is suspended and jumps there unless `state == 0`. If state is 0 that means that this is the first execution of coroutine so there is really no _yield_ to jump to. In that case only local arguments passed to coroutine are restored and special check is generated which throws `CoroutineClosedException` if the caller closed this coroutine before it had a chance to execute.
-Next all user code (bytecode) is emitted up to the yield point. All changes of variables positions caused by coroutine locals and arguments are taken into account. This procedure is repeated till the end of method instruction stream.
+Next all user code (bytecode) is emitted up to the yield point, except for return statements and the _ `_method` _. Returns are simply removed, `NoSuchElementException` is emitted instead, _ `_method` _ is replaced by no-op. All changes of variables positions caused by coroutine locals and arguments are taken into account. This procedure is repeated till the end of method instruction stream.
 
 == Yielding ==
 
+When call to `mr.go.coroutines.user.Coroutines.yield` is detected it is removed completely and replacement bytecode is emitted. Instructions which override `yield` store local variables and stack in the `Frame` container, update `Frame` state variable, resolve jump instruction offset from *preamble* _case_ statement, store the top element on the operand stack in the third local variable and emit jump instruction to *prologue* code. *Prologue* code's only task is to return reference from the third local variable, it is created after all user code instructions have been processed.
+
+Because `Frame` must store every reference as an object reference
 
 
 = Details =
