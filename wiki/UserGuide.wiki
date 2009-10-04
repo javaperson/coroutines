@@ -44,6 +44,13 @@ This library uses JDK logging in following fashion:
   * informational messages about instrumentation process are logged by `mr.go.coroutines.ClassTransformer`, `mr.go.coroutines.CoroutineInstrumentator` and `mr.go.coroutines.ClassAnalyzer` loggers - mostly FINEST and FINER levels, these loggers are also used for reporting warnings if instrumentation cannot be, for some reason, completed - WARNING level, if unexpected exception was thrown when instrumenting, also SEVERE
   * if _debug_ option is specified additional loggers are used to trace coroutine execution, one per instrumented class. Tracing logger is named after fully qualified name of instrumented class. All information about coroutine state is logged on FINER and FINEST levels
 
+== Compilers ==
+
+Currently, this library has been tested with two Java 6 compilers:
+  * javac
+  * Eclipse compiler
+While it should be compatible with code produced by any conforming Java 6 compiler, its compatibility has not been proven. Please report any compatibility issues (or lack of them) with other compilers as you notice them. 
+
 = How to write? =
 
 Writing coroutines is not much different than writing ordinary Java method. There are only two special methods you need to remember about - _yield_ and _ `_ method` _. They are defined in _mr.go.coroutines.user.Coroutines_, you are strongly recommended to static import them for aesthetic verbosity. If you browse their source, you'll notice that they are strange one-liners that do not do much apart from throwing an exception. That's right - but they are known to Java agent which transforms them into something useful. Let's then write some example coroutine and try to understand what is it all about. This example is modeled after David Beazley's example for Python - in fact, this library aims to be on a par with Python coroutines. You can see the original example [http://www.dabeaz.com/coroutines/Coroutines.pdf here]
