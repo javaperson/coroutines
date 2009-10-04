@@ -37,12 +37,5 @@ Next all user code (bytecode) is emitted up to the yield point, except for retur
 
 When call to `mr.go.coroutines.user.Coroutines.yield` is detected it is removed completely and replacement bytecode is emitted. Instructions which override `yield` store local variables and stack in the `Frame` container, update `Frame` state variable, resolve jump instruction offset from *preamble* _case_ statement, store the top element on the operand stack in the third local variable and emit jump instruction to *prologue* code. *Prologue* code's only task is to return reference from the third local variable, it is created after all user code instructions have been processed.
 
-Because `Frame` must store every reference as an object reference
+Because `Frame` must store every reference as an object reference, it is essential to know approximate runtime type of every local variable and operand on the stack during yielding operation to perform appropriate typecasting and unboxing on restore and boxing on save. Fundamental assertion of yield is that types and values of local variables and operands have to be identical before and after any yield. Fortunately, these can be deduced from instruction stream and original method descriptor. Every instruction that mutates operand stack is simulated on _internal_ temporary stack (_internal_ stack contains only deduced type information) and for every transformed method structures containing deduced variable info are maintained. With help of these, appropriate type casts are introduced in bytecode.
 
-
-= Details =
-
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
