@@ -105,10 +105,10 @@ Let's see how it works in practice. We are going to examine grep cporoutine. The
 
 Stack map 1 marks `freader`, `reader`, `line` and `regex` as not temporary. They are initialized as well because of assignments except for `line` which is uninitialized currently. `File` and `pattern` are final because they are actual arguments of this method.
 
-At (1) yield is taking place. It copies all non final variables (`line` has become initialized at this point). All local variables are not final, except method arguments so there is no need to copy them. All variables except `isFound` have been not temporary at the time of yield so they become final
+At (1) yield takes place. All non final variables are copied (`line` has become initialized at this point) because all local variables are not final, except method arguments so there is no need to copy them. All variables except `isFound` have been not temporary at the time of yield so they become final right after.
 
 At Stack map 2 `line` and `isFound` go out of scope.
 
 At the beginning of exception handler only active variables have to be restored. That includes: `file`, `pattern`, `freader`, `reader` and `regex`
 
-At (2) another yield is taking place. Because all local variables are either final or uninitialized nothing needs to be copied to `Frame`
+At (2) another yield takes place. Because all local variables are either final or uninitialized nothing needs to be copied to `Frame`.
