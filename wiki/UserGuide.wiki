@@ -96,7 +96,28 @@ First, and probably the most important, thing to remember is to annotate every c
 
 == Execution of coroutine ==
 
-Coroutine executes as any Java method until it encounters _yield_ method. _yield_ does not execute as normal method, if 
+Coroutine executes as any Java method until it encounters _yield_ method. _yield_ does not execute as normal method, if it had, it would throw `InvalidCoroutineException`. Instead of throwing exception (which indicates that coroutine has not been properly instrumented) _yield_ saves current execution context - that is: local variables and operand stack at this point and makes method return to its caller. Saving stack is necessary when _yield_ is part of some bigger expression, consider: {{{threshold = threshold - delta * (Double) yield(rnd < threshold);}}} Argument of _yield_ becomes now the current result of coroutine (that is, the result of `CoIterator` _next_ as `CoIterator` is normally the only coroutine caller, but there is no need to be aware of `CoIterator`'s role in this process from coroutine author's point of view, as `CoIterator` is simply an interface of coroutine to its clients, thus by saying 'caller' we mean `CoIterator` _next_ or _send_ caller). Additionally, you may use _yield_ overload which takes no arguments, then caller is simply passed `null`. It is mainly useful when you want to receive something from the caller, rather than send him something. In the example we want to pass line in a file matching a pattern, so we use appropriate _yield_ form. We also do not expect anything to be send to us, so we do not assign _yield_ to anything.
+
+Coroutine remains suspended until its caller wants to obtain a next result, or sends something to coroutine. Execution is then resumed from the last executed _yield_. Local variables and stack are restored. If caller sent a value then it becomes the result of _yield_ and execution continues. Looking at grep you will notice that it immediately tries to read next line from file in an effort to find next matching line.
+There are only two exceptions to this execution flow. The first is when coroutine decides that it has nothing to be done, like grep when nothing is to be read from file and it leaves its inner loop. Grep tries to inform its caller about this state and yields `null`. If caller, after it has received this `null`, erroneously calls coroutine one more time then you can see that coroutines executes the _ `_ method` _ . The result of this method would have normally been passed to caller, but this is not the case - it would have been indistinguishable from _yield_. Instead of normal execution the _ `_ method` _ results in `NoSuchElementException` thrown to caller (this execption has been chosen so that it makes coroutines similar to standard Java iterators). The second exception occurs when caller decides that it does not need coroutine anymore. Through `CoIterator` it issues _close_ command which results in throwing `CoroutineExitException` from _yield_. You can catch this exception if you want and react correspondingly (grep closes opened stream in this case), you may ignore it completely as well - this exception is never thrown to caller. If you try to _yield_ from `CoroutineExitException` handler, you will silently fail. Caller never receives anything from your coroutine at this point. Therefore, there are two actual ways of dealing with _close_ - to ignore it, or to clean up.
+
+== Return statements ==
+
+Coroutines very often _yield_ from some form of never-ending loop. The most classical example being Fibonacci numbers generator (generators can be written using coroutines, generator is simply a coroutine which never expects anything from its caller - like grep)
+{{{
+	@Coroutine
+	public static CoIterator<Integer, Void> fibonacciNumbers() {
+		int a = 0;
+		int b = 1;
+		while (true) {
+			yield(a);
+			int next = a + b;
+			a = b;
+			b = next;
+		}
+	}
+}}}
+
+In such cases it is up to the caller to _close_ coroutine, as coroutine by itself can execute endlessly. But what is maybe more important than caller considerations is the fact that most (all?) Java compilers do not enforce that method must contain return statement in such cases, being content with information, obtained from static analysis, that this code will execute forever. But there are numerous examples when coroutine in fact returns. Take grep - it obviously produces finite stream of results. 
 
 == Coroutine annotation ==
-
