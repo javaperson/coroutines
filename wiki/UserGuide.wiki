@@ -46,6 +46,57 @@ This library uses JDK logging in following fashion:
 
 = How to write? =
 
-Writing coroutines is not much different than writing ordinary Java method. There are only two special methods you need to remember about - _yield_ and _ `_ method` _. They are defined in _mr.go.coroutines.user.Coroutines_, you are strongly recommended to static import them for aesthetic verbosity. If you browse their source, you'll notice that they are strange one-liners that do not do much. That's right - but they are known to Java agent which transforms them into something useful. Let's then write some example coroutine and try to understand what is it all about. This example is modeled after David Beazley's example for Python - in fact, this library aims to be on a par with Python coroutines. You can see the original example [http://www.dabeaz.com/coroutines/Coroutines.pdf here]
+Writing coroutines is not much different than writing ordinary Java method. There are only two special methods you need to remember about - _yield_ and _ `_ method` _. They are defined in _mr.go.coroutines.user.Coroutines_, you are strongly recommended to static import them for aesthetic verbosity. If you browse their source, you'll notice that they are strange one-liners that do not do much apart from throwing an exception. That's right - but they are known to Java agent which transforms them into something useful. Let's then write some example coroutine and try to understand what is it all about. This example is modeled after David Beazley's example for Python - in fact, this library aims to be on a par with Python coroutines. You can see the original example [http://www.dabeaz.com/coroutines/Coroutines.pdf here]
+
+{{{
+import static mr.go.coroutines.user.Coroutines._;
+import static mr.go.coroutines.user.Coroutines.yield;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.regex.Pattern;
+
+import mr.go.coroutines.user.CoIterator;
+import mr.go.coroutines.user.Coroutine;
+import mr.go.coroutines.user.CoroutineExitException;
+
+public final class Grep {
+
+	@Coroutine
+	public static CoIterator<String, Void> grep(String pattern, String file)
+			throws IOException {
+		FileReader freader = new FileReader(file);
+		BufferedReader reader = new BufferedReader(freader);
+		String line;
+		Pattern regex = Pattern.compile(pattern);
+		try {
+			while ((line = reader.readLine()) != null) {
+				boolean isFound = regex.matcher(line).find();
+				if (isFound) {
+					yield(line);
+				}
+			}
+		} catch (CoroutineExitException e) {
+			reader.close();
+			throw e;
+		}
+		yield(null);
+		reader.close();
+		return _();
+	}
+}
+}}}
+
+We will follow this (and others) example in subsequent sections of this document
+
+== Definition of coroutine method ==
+
+First, and probably the most important, thing to remember is to annotate every coroutine method with Coroutine annotation. The annotation may be used as in the example, but there are also two other options which control Coroutine behavior. They are explained in [#Coroutine_annotation] section. Coroutine methods may be private, public, protected, static - there are no restrictions whatsoever. Only the class containing a coroutine must be visible to classes outside its package, which simply means that it has to be public. Second requirement for method which you want to be coroutine concerns type of its result. It has to be `mr.go.coroutines.user.CoIterator`. If it is not then warning is logged and class is left not instrumented, which will probably manifest itself with `InvalidCoroutineException` or even something worse (as nonterminating loop). Two important things about `CoIterator`: it is interface which contains coroutine execution state and provides clients of coroutine with ability to control its behavior (like obtaining result from coroutine and sending values to coroutine), and, you do not have to implement this interface ever. It is always implemented by instrumentation layer. There are no other obligations for coroutine author - method can throw any exceptions, contain any valid Java code, take arbitrary arguments etc (actually there is one more, governing where _yield_ can be used, it must not be used as an argument to a constructor. But more on this later). `CoIterator` is generic type which takes two type arguments - first indicates type of result coroutine produces (in grep case it is clearly a String), second - what it expects to be sent to it (grep clearly does not need to be sent anything to do its job, thus Void). 
+
+== Execution of coroutine ==
+
+Coroutine executes as any Java method until it encounters _yield_ method. _yield_ does not execute as normal method, if 
 
 == Coroutine annotation ==
+
