@@ -53,7 +53,7 @@ public final class Coroutines {
 	 *         coroutine execution it becomes result of <code>yield</code>
 	 */
 	public static <A> A yield() {
-		return null;
+		throw new InvalidCoroutineException();
 	}
 
 	/**
@@ -70,6 +70,6 @@ public final class Coroutines {
 	 *         coroutine execution it becomes result of <code>yield</code>
 	 */
 	public static <E, A> A yield(E e) {
-		return null;
+		throw new InvalidCoroutineException();
 	}
 }
