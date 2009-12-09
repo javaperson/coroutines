@@ -949,7 +949,6 @@ final class MethodTransformer extends InstructionAdapter {
 		return super.visitAnnotation(desc, visible);
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	public void visitCode() {
 		super.visitCode();
@@ -1035,7 +1034,6 @@ final class MethodTransformer extends InstructionAdapter {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	public void visitFrame(
 			int type,
@@ -1191,7 +1189,6 @@ final class MethodTransformer extends InstructionAdapter {
 		super.visitFrame(type, nLocal, locals, stack, stack2);
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	public void visitLabel(Label label) {
 		TryCatchBlock currentBlock;
@@ -1562,7 +1559,6 @@ final class MethodTransformer extends InstructionAdapter {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
 	private ListIterator<VariableInfo> varIterator() {
 		// iterate over variables after "locals array"
 		int variablesSize = variables.size();
