@@ -13,7 +13,6 @@
    See the License for the specific language governing permissions and
    limitations under the License.
  */
-
 package mr.go.coroutines.core;
 
 public class CoroutineGenerationException extends RuntimeException {
@@ -38,5 +37,4 @@ public class CoroutineGenerationException extends RuntimeException {
 	}
 
 	private static final long	serialVersionUID	= 6463083548968291274L;
-
 }

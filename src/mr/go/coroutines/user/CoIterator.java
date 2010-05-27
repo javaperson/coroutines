@@ -1,19 +1,18 @@
 /*
  * Copyright [2009] [Marcin Rzeźnicki]
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
  */
-
 package mr.go.coroutines.user;
 
 import java.util.Iterator;
@@ -116,4 +115,26 @@ public interface CoIterator<E, A> {
 	 */
 	Iterable<E> till(int count);
 
+	/**
+	 * results of coroutine as {@link Iterable}. Coroutine is controled by
+	 * {@link Controler} instance passed to this method. Coroutine is closed
+	 * when this <code>Iterable</code> ends
+	 * 
+	 * @param controler
+	 *            coroutine's controler
+	 * @return results of coroutine as <code>Iterable</code>
+	 */
+	Iterable<E> with(Controler<E, A> controler);
+
+	/**
+	 * results of coroutine as {@link Iterable}. Each result is obtained by
+	 * calling {@link CoIterator#send(Object) send} method. Parameters passed to
+	 * <code>send</code> method are taken from <code>toSend</code> array in
+	 * sequence. Coroutine is closed when this <code>Iterable</code> ends
+	 * 
+	 * @param toSend
+	 *            parameters sent to coroutine
+	 * @return results of coroutine as <code>Iterable</code>
+	 */
+	Iterable<E> withPattern(A... toSend);
 }

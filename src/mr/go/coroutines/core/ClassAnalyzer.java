@@ -1,20 +1,22 @@
 /*
  * Copyright [2009] [Marcin Rzeźnicki]
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
  */
-
 package mr.go.coroutines.core;
+
+import static mr.go.coroutines.core.StringConstants.COROUTINE_DESCRIPTOR;
+import static mr.go.coroutines.core.StringConstants.CO_ITERATOR_DESCRIPTOR;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -71,15 +73,20 @@ final class ClassAnalyzer extends EmptyVisitor {
 				boolean returnsCoIterator = Type.getReturnType(
 						methodId.descriptor).getDescriptor().equals(
 						CO_ITERATOR_DESCRIPTOR);
+				boolean isCorrect = !isAbstract & returnsCoIterator
+									& !isConstructor;
 				if (isAbstract) {
 					logger.warning("Abstract method " + methodId
 									+ " annotated as coroutine");
-				} else if (!returnsCoIterator) {
+				}
+				if (!returnsCoIterator) {
 					logger.warning("Method " + methodId
 									+ " does not return CoIterator");
-				} else if (isConstructor) {
+				}
+				if (isConstructor) {
 					logger.warning("Cannot make a coroutine from constructor");
-				} else {
+				}
+				if (isCorrect) {
 					coroutineMethods.add(methodId);
 				}
 			}
@@ -87,10 +94,6 @@ final class ClassAnalyzer extends EmptyVisitor {
 		}
 	}
 
-	public static final String	CO_ITERATOR_DESCRIPTOR	= "Lmr/go/coroutines/user/CoIterator;";
-
-	public static final String	COROUTINE_DESCRIPTOR	= "Lmr/go/coroutines/user/Coroutine;";
-
-	private static final Logger	logger					= Logger
-																.getLogger("mr.go.coroutines.ClassAnalyzer");
+	private static final Logger	logger	= Logger
+												.getLogger("mr.go.coroutines.ClassAnalyzer");
 }

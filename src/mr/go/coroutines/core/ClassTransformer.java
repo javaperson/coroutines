@@ -1,39 +1,29 @@
 /*
  * Copyright [2009] [Marcin Rzeźnicki]
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
  */
-
 package mr.go.coroutines.core;
 
 import static java.lang.Math.abs;
-import static mr.go.coroutines.core.InstructionGenerationUtils.CO_ITERATOR_CONSTRUCTOR_DESCRIPTOR;
-import static mr.go.coroutines.core.InstructionGenerationUtils.INTEGER;
-import static mr.go.coroutines.core.InstructionGenerationUtils.LOGGER_DESCRIPTOR;
-import static mr.go.coroutines.core.InstructionGenerationUtils.LOGGER_NAME;
-import static mr.go.coroutines.core.InstructionGenerationUtils.OBJECT;
-import static mr.go.coroutines.core.InstructionGenerationUtils._JAVA_LANG_OBJECT;
-import static mr.go.coroutines.core.InstructionGenerationUtils.callNext;
-import static mr.go.coroutines.core.InstructionGenerationUtils.coIterator;
-import static mr.go.coroutines.core.InstructionGenerationUtils.createDebugFrame;
-import static mr.go.coroutines.core.InstructionGenerationUtils.createFrame;
-import static mr.go.coroutines.core.InstructionGenerationUtils.loadline;
-import static mr.go.coroutines.core.InstructionGenerationUtils.loadlocs;
-import static mr.go.coroutines.core.InstructionGenerationUtils.loadthis;
-import static mr.go.coroutines.core.InstructionGenerationUtils.logfiner;
-import static mr.go.coroutines.core.InstructionGenerationUtils.logfinest;
-import static mr.go.coroutines.core.InstructionGenerationUtils.saveloc;
-import static mr.go.coroutines.core.InstructionGenerationUtils.savelocs;
+import static mr.go.coroutines.core.CodeGenerationUtils.box_int;
+import static mr.go.coroutines.core.CodeGenerationUtils.makeInt;
+import static mr.go.coroutines.core.CodeGenerationUtils.saveloc;
+import static mr.go.coroutines.core.CodeGenerationUtils.savelocs;
+import static mr.go.coroutines.core.StringConstants.CALL_METHOD_DESCRIPTOR;
+import static mr.go.coroutines.core.StringConstants.COROUTINE_METHOD_DESCRIPTOR;
+import static mr.go.coroutines.core.StringConstants.CO_ITERATOR_CONSTRUCTOR_DESCRIPTOR;
+import static mr.go.coroutines.core.StringConstants.FRAME_NAME;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -43,16 +33,43 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.objectweb.asm.ClassAdapter;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.FieldVisitor;
-import org.objectweb.asm.MethodVisitor;
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
+import org.objectweb.asm.*;
 
 final class ClassTransformer extends ClassAdapter {
+
+	private static void createDebugFrame(
+			int maxVariables,
+			String[] variableNames,
+			MethodVisitor mv) {
+		mv.visitTypeInsn(Opcodes.NEW, FRAME_NAME);
+		mv.visitInsn(Opcodes.DUP);
+		makeInt(maxVariables, mv);
+		makeInt(variableNames.length, mv);
+		mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
+		for (int i = 0; i < variableNames.length; i++) {
+			mv.visitInsn(Opcodes.DUP);
+			makeInt(i, mv);
+			String name = variableNames[i];
+			if (name != null) {
+				mv.visitLdcInsn(name);
+			} else {
+				mv.visitInsn(Opcodes.ACONST_NULL);
+			}
+			mv.visitInsn(Opcodes.AASTORE);
+		}
+		mv.visitMethodInsn(
+				Opcodes.INVOKESPECIAL,
+				FRAME_NAME,
+				"<init>",
+				"(I[Ljava/lang/String;)V");
+	}
+
+	private static void createFrame(int maxVariables, MethodVisitor mv) {
+		mv.visitTypeInsn(Opcodes.NEW, FRAME_NAME);
+		mv.visitInsn(Opcodes.DUP);
+		makeInt(maxVariables, mv);
+		mv.visitMethodInsn(Opcodes.INVOKESPECIAL, FRAME_NAME, "<init>", "(I)V");
+	}
 
 	private static String getCoroutineName(MethodId methodId) {
 		// little name mangling, let's feel like we were writing C++ compiler
@@ -72,6 +89,78 @@ final class ClassTransformer extends ClassAdapter {
 		return sb.toString();
 	}
 
+	private static void log(
+			String ownerName,
+			String loggerField,
+			Level level,
+			MethodVisitor mv,
+			Object... messages) {
+		mv.visitFieldInsn(
+				Opcodes.GETSTATIC,
+				ownerName,
+				loggerField,
+				"Ljava/util/logging/Logger;");
+		mv.visitFieldInsn(Opcodes.GETSTATIC, "java/util/logging/Level", level
+				.getName(), "Ljava/util/logging/Level;");
+		// stack: * *
+		mv.visitMethodInsn(
+				Opcodes.INVOKEVIRTUAL,
+				"java/util/logging/Logger",
+				"isLoggable",
+				"(Ljava/util/logging/Level;)Z");
+		// stack: *
+		Label exitBranch = new Label();
+		mv.visitJumpInsn(Opcodes.IFEQ, exitBranch);
+		// stack:
+		mv.visitFieldInsn(
+				Opcodes.GETSTATIC,
+				ownerName,
+				loggerField,
+				"Ljava/util/logging/Logger;");
+		mv.visitFieldInsn(Opcodes.GETSTATIC, "java/util/logging/Level", level
+				.getName(), "Ljava/util/logging/Level;");
+		// stack: * *
+		mv.visitTypeInsn(Opcodes.NEW, "java/lang/StringBuilder");
+		mv.visitInsn(Opcodes.DUP);
+		// stack: * * * *
+		String message0 = messages[0].toString();
+		mv.visitLdcInsn(message0);
+		// stack: * * * * *
+		mv.visitMethodInsn(
+				Opcodes.INVOKESPECIAL,
+				"java/lang/StringBuilder",
+				"<init>",
+				"(Ljava/lang/String;)V");
+		// stack: * * *
+		for (int m = 1; m < messages.length; m++) {
+			Object message = messages[m];
+			if (message instanceof Number) {
+				mv.visitVarInsn(Opcodes.ALOAD, ((Number) message).intValue());
+			} else {
+				mv.visitLdcInsn(message.toString());
+			}
+			// stack: * * * *
+			mv.visitMethodInsn(
+					Opcodes.INVOKEVIRTUAL,
+					"java/lang/StringBuilder",
+					"append",
+					"(Ljava/lang/Object;)Ljava/lang/StringBuilder;");
+			// stack: * * *
+		}
+		mv.visitMethodInsn(
+				Opcodes.INVOKEVIRTUAL,
+				"java/lang/StringBuilder",
+				"toString",
+				"()Ljava/lang/String;");
+		mv.visitMethodInsn(
+				Opcodes.INVOKEVIRTUAL,
+				"java/util/logging/Logger",
+				"log",
+				"(Ljava/util/logging/Level;Ljava/lang/String;)V");
+		// stack:
+		mv.visitLabel(exitBranch);
+	}
+
 	private final List<MethodId>					coroutines;
 
 	private final boolean							generateDebugCode;
@@ -86,7 +175,7 @@ final class ClassTransformer extends ClassAdapter {
 
 	private Type									thisType;
 
-	public ClassTransformer(
+	ClassTransformer(
 			ClassVisitor writer,
 			List<MethodId> coroutines,
 			boolean generateDebugCode,
@@ -121,7 +210,6 @@ final class ClassTransformer extends ClassAdapter {
 		 */
 		log.finest("Generating CoIterator implementation and method stubs");
 		// num is used for generating unamibigous names
-		int maxStack, maxLocals;
 		for (MethodId methodId : methodProperties.keySet()) {
 			MethodProperties properties = methodProperties.get(methodId);
 			boolean isStatic = properties.isStatic();
@@ -130,7 +218,7 @@ final class ClassTransformer extends ClassAdapter {
 			 * Generate CoIterator class
 			 */
 			String coIteratorName = "mr/go/coroutines/core/CoIterator" + num;
-			String baseCoIteratorName = null;
+			String baseCoIteratorName;
 			if (properties.isThreadLocal()) {
 				baseCoIteratorName = Type
 						.getInternalName(ThreadLocalCoIterator.class);
@@ -172,7 +260,7 @@ final class ClassTransformer extends ClassAdapter {
 						Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL
 								| Opcodes.ACC_STATIC,
 						"logger",
-						LOGGER_DESCRIPTOR,
+						"Ljava/util/logging/Logger;",
 						null,
 						null);
 				fv.visitEnd();
@@ -188,14 +276,14 @@ final class ClassTransformer extends ClassAdapter {
 				mv.visitLdcInsn(loggerName);
 				mv.visitMethodInsn(
 						Opcodes.INVOKESTATIC,
-						LOGGER_NAME,
+						"java/util/logging/Logger",
 						"getLogger",
-						GET_LOGGER_METHOD_DESCRIPTOR);
+						"(Ljava/lang/String;)Ljava/util/logging/Logger;");
 				mv.visitFieldInsn(
 						Opcodes.PUTSTATIC,
 						coIteratorName,
 						"logger",
-						LOGGER_DESCRIPTOR);
+						"Ljava/util/logging/Logger;");
 				mv.visitInsn(Opcodes.RETURN);
 				mv.visitMaxs(1, 0);
 				mv.visitEnd();
@@ -238,15 +326,21 @@ final class ClassTransformer extends ClassAdapter {
 				 */
 				if (generateDebugCode) {
 					String coroutineId = "Coroutine " + methodId;
-					logfiner(
+					log(
 							coIteratorName,
 							"logger",
+							Level.FINER,
 							mv,
 							coroutineId + " call. Caller sent: ",
 							2);
 					mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
-					logfinest(coIteratorName, "logger", mv, coroutineId
-															+ " state ", 1);
+					log(
+							coIteratorName,
+							"logger",
+							Level.FINEST,
+							mv,
+							coroutineId + " state ",
+							1);
 					mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
 				}
 				/*
@@ -254,7 +348,14 @@ final class ClassTransformer extends ClassAdapter {
 				 * output
 				 */
 				if (!isStatic) {
-					loadthis(1, thisType, mv);
+					mv.visitVarInsn(Opcodes.ALOAD, 1);
+					mv.visitMethodInsn(
+							Opcodes.INVOKEVIRTUAL,
+							FRAME_NAME,
+							"getThis",
+							"()Ljava/lang/Object;");
+					mv.visitTypeInsn(Opcodes.CHECKCAST, thisType
+							.getInternalName());
 				}
 				mv.visitVarInsn(Opcodes.ALOAD, 1);
 				mv.visitInsn(Opcodes.ACONST_NULL);
@@ -265,46 +366,46 @@ final class ClassTransformer extends ClassAdapter {
 						thisType.getInternalName(),
 						coroutineName,
 						COROUTINE_METHOD_DESCRIPTOR);
+				// stack: *
 				if (!generateDebugCode) {
 					mv.visitInsn(Opcodes.ARETURN);
 				} else {
 					// save result display suspension point (two more locals
 					// needed)
 					mv.visitVarInsn(Opcodes.ASTORE, 3);
-					loadline(1, mv);
+					mv.visitVarInsn(Opcodes.ALOAD, 1);
+					mv.visitMethodInsn(
+							Opcodes.INVOKEVIRTUAL,
+							FRAME_NAME,
+							"getLineOfCode",
+							"()I");
+					box_int(Type.INT, mv);
 					mv.visitVarInsn(Opcodes.ASTORE, 4);
-					logfiner(
+					log(
 							coIteratorName,
 							"logger",
+							Level.FINER,
 							mv,
 							"Coroutine suspended at line ",
 							4,
 							". Yielded:",
 							3);
 					mv.visitFrame(Opcodes.F_APPEND, 2, new Object[]
-					{ OBJECT, INTEGER }, 0, null);
+					{ "java/lang/Object", "java/lang/Integer" }, 0, null);
 					mv.visitVarInsn(Opcodes.ALOAD, 3);
 					mv.visitInsn(Opcodes.ARETURN);
 				}
 				// if debugging code is emitted it needs space for two
-				// additional locals and 4 stack operand
+				// additional locals and 5 stack operand
 				if (generateDebugCode) {
-					if (isStatic) {
-						maxStack = 4;
-						maxLocals = 5;
-					} else {
-						maxStack = 4;
-						maxLocals = 5;
-					}
+					mv.visitMaxs(5, 5);
 				} else {
 					if (isStatic) {
-						maxStack = maxLocals = 3;
+						mv.visitMaxs(3, 3);
 					} else {
-						maxStack = 4;
-						maxLocals = 3;
+						mv.visitMaxs(4, 3);
 					}
 				}
-				mv.visitMaxs(maxStack, maxLocals);
 				mv.visitEnd();
 			}
 			cv.visitEnd();
@@ -367,7 +468,12 @@ final class ClassTransformer extends ClassAdapter {
 				 */
 				int argsSize = properties.getArgsSize();
 				methodWriter.visitVarInsn(Opcodes.ASTORE, argsSize);
-				loadlocs(argsSize, methodWriter);
+				methodWriter.visitVarInsn(Opcodes.ALOAD, argsSize);
+				methodWriter.visitMethodInsn(
+						Opcodes.INVOKEVIRTUAL,
+						FRAME_NAME,
+						"getLocals",
+						"()[Ljava/lang/Object;");
 				int localsArrayIndex = argsSize + 1;
 				methodWriter.visitVarInsn(Opcodes.ASTORE, localsArrayIndex);
 				/*
@@ -377,15 +483,15 @@ final class ClassTransformer extends ClassAdapter {
 				int argsLength = properties.getArgsLength();
 				Type[] argsTypes = properties.getArgsTypes();
 				if (!isStatic) {
-					int varIndex = saveloc(
+					saveloc(
 							localsArrayIndex,
 							0,
 							0,
-							_JAVA_LANG_OBJECT,
+							Types.JAVA_LANG_OBJECT,
 							methodWriter);
 					savelocs(
 							localsArrayIndex,
-							varIndex,
+							1,
 							1,
 							argsLength,
 							methodWriter,
@@ -403,9 +509,22 @@ final class ClassTransformer extends ClassAdapter {
 				 * create CoIterator instance with saved frame, make initial
 				 * call to next if needed and return to caller
 				 */
-				coIterator(argsSize, coIteratorName, methodWriter);
+				methodWriter.visitTypeInsn(Opcodes.NEW, coIteratorName);
+				methodWriter.visitInsn(Opcodes.DUP);
+				methodWriter.visitVarInsn(Opcodes.ALOAD, argsSize);
+				methodWriter.visitMethodInsn(
+						Opcodes.INVOKESPECIAL,
+						coIteratorName,
+						"<init>",
+						CO_ITERATOR_CONSTRUCTOR_DESCRIPTOR);
 				if (properties.isRequestNext()) {
-					callNext(coIteratorName, methodWriter);
+					methodWriter.visitInsn(Opcodes.DUP);
+					methodWriter.visitMethodInsn(
+							Opcodes.INVOKEVIRTUAL,
+							coIteratorName,
+							"next",
+							"()Ljava/lang/Object;");
+					methodWriter.visitInsn(Opcodes.POP);
 				}
 				methodWriter.visitInsn(Opcodes.ARETURN);
 				/*
@@ -416,13 +535,12 @@ final class ClassTransformer extends ClassAdapter {
 				 * argsSize + 1 reference to frame + 1 array of locals
 				 */
 				if (isDebugFramePossible) {
-					maxStack = 7;
+					methodWriter.visitMaxs(7, localsArrayIndex + 1);
 				} else {
-					maxStack = (properties.isCategory2ArgumentPresent()) ? 4
-																		: 3;
+					methodWriter.visitMaxs(
+							properties.isCategory2ArgumentPresent() ? 4 : 3,
+							localsArrayIndex + 1);
 				}
-				maxLocals = localsArrayIndex + 1;
-				methodWriter.visitMaxs(maxStack, maxLocals);
 				methodWriter.visitEnd();
 			}
 			num++;
@@ -472,15 +590,8 @@ final class ClassTransformer extends ClassAdapter {
 		return super.visitMethod(access, name, desc, signature, exceptions);
 	}
 
-	public static String		CALL_METHOD_DESCRIPTOR			= "(Lmr/go/coroutines/core/Frame;Ljava/lang/Object;)Ljava/lang/Object;";
-
-	public static String		COROUTINE_METHOD_DESCRIPTOR		= "(Lmr/go/coroutines/core/Frame;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;";
-
-	public static String		GET_LOGGER_METHOD_DESCRIPTOR	= "(Ljava/lang/String;)Ljava/util/logging/Logger;";
-
-	private static final Logger	log								= Logger
-																		.getLogger("mr.go.coroutines.ClassTransformer");
+	private static final Logger	log	= Logger
+											.getLogger("mr.go.coroutines.ClassTransformer");
 
 	private static int			num;
-
 }

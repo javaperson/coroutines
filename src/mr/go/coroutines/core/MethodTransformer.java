@@ -1,49 +1,33 @@
 /*
  * Copyright [2009] [Marcin Rzeźnicki]
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
  */
-
 package mr.go.coroutines.core;
 
-import static java.lang.Math.max;
-import static mr.go.coroutines.core.InstructionGenerationUtils.EXCEPTION_CLOSED;
-import static mr.go.coroutines.core.InstructionGenerationUtils.EXCEPTION_EXIT;
-import static mr.go.coroutines.core.InstructionGenerationUtils.EXCEPTION_INVALID;
-import static mr.go.coroutines.core.InstructionGenerationUtils.EXCEPTION_RETURN;
-import static mr.go.coroutines.core.InstructionGenerationUtils.FRAME_NAME;
-import static mr.go.coroutines.core.InstructionGenerationUtils.OBJECT;
-import static mr.go.coroutines.core.InstructionGenerationUtils.OBJECT_ARRAY;
-import static mr.go.coroutines.core.InstructionGenerationUtils._JAVA_LANG_OBJECT;
-import static mr.go.coroutines.core.InstructionGenerationUtils._JAVA_LANG_STRING;
-import static mr.go.coroutines.core.InstructionGenerationUtils.chkclosed;
-import static mr.go.coroutines.core.InstructionGenerationUtils.getloc;
-import static mr.go.coroutines.core.InstructionGenerationUtils.getlocs;
-import static mr.go.coroutines.core.InstructionGenerationUtils.input;
-import static mr.go.coroutines.core.InstructionGenerationUtils.loadexitstate;
-import static mr.go.coroutines.core.InstructionGenerationUtils.loadlocs;
-import static mr.go.coroutines.core.InstructionGenerationUtils.loadstack;
-import static mr.go.coroutines.core.InstructionGenerationUtils.loadstate;
-import static mr.go.coroutines.core.InstructionGenerationUtils.saveline;
-import static mr.go.coroutines.core.InstructionGenerationUtils.savelocs;
-import static mr.go.coroutines.core.InstructionGenerationUtils.savestack;
-import static mr.go.coroutines.core.InstructionGenerationUtils.savestate;
-import static mr.go.coroutines.core.InstructionGenerationUtils.switchstate;
-import static mr.go.coroutines.core.InstructionGenerationUtils.throwex;
+import static mr.go.coroutines.core.CodeGenerationUtils.*;
+import static mr.go.coroutines.core.StringConstants.COROUTINES_NAME;
+import static mr.go.coroutines.core.StringConstants.COROUTINE_DESCRIPTOR;
+import static mr.go.coroutines.core.StringConstants.FRAME_NAME;
 
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.Collection;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.ListIterator;
 
-import org.apache.commons.collections.iterators.ReverseListIterator;
 import org.apache.commons.collections.list.GrowthList;
 import org.apache.commons.collections.map.MultiValueMap;
 import org.objectweb.asm.AnnotationVisitor;
@@ -55,60 +39,121 @@ import org.objectweb.asm.commons.InstructionAdapter;
 
 final class MethodTransformer extends InstructionAdapter {
 
-	private static Object getFrameOpcode(Type t) {
-		if (t == null) {
-			return new Label();
+	private static void loadstack(
+			int frameIndex,
+			Type[] stackTypes,
+			MethodVisitor mv) {
+		int top = stackTypes.length - 1;
+		mv.visitVarInsn(Opcodes.ALOAD, frameIndex);
+		mv.visitMethodInsn(
+				Opcodes.INVOKEVIRTUAL,
+				FRAME_NAME,
+				"getOperands",
+				"()[Ljava/lang/Object;");
+		for (int i = top; i >= 0; i--) {
+			Type stackType = stackTypes[i];
+			int typeSort = stackType.getSort();
+			if (typeSort == Type.VOID) {
+				mv.visitInsn(Opcodes.ACONST_NULL);
+				mv.visitInsn(Opcodes.SWAP);
+				continue;
+			}
+			mv.visitInsn(Opcodes.DUP);
+			// stack: array array
+			makeInt(i, mv);
+			mv.visitInsn(Opcodes.AALOAD);
+			// stack: array element
+			switch (typeSort) {
+			case Type.BOOLEAN:
+			case Type.CHAR:
+			case Type.BYTE:
+			case Type.SHORT:
+			case Type.INT:
+				unbox_int(typeSort, mv);
+				mv.visitInsn(Opcodes.SWAP);
+				break;
+			case Type.FLOAT:
+				unbox_float(typeSort, mv);
+				mv.visitInsn(Opcodes.SWAP);
+				break;
+			case Type.LONG:
+				unbox_long(typeSort, mv);
+				mv.visitInsn(Opcodes.DUP2_X1);
+				mv.visitInsn(Opcodes.POP2);
+				break;
+			case Type.DOUBLE:
+				unbox_double(typeSort, mv);
+				mv.visitInsn(Opcodes.DUP2_X1);
+				mv.visitInsn(Opcodes.POP2);
+				break;
+			case Type.ARRAY:
+			case Type.OBJECT:
+				mv
+						.visitTypeInsn(Opcodes.CHECKCAST, stackType
+								.getInternalName());
+				mv.visitInsn(Opcodes.SWAP);
+				break;
+			}
+			// stack: element array
 		}
-		int typeSort = t.getSort();
-		switch (typeSort) {
-		case Type.ARRAY:
-		case Type.OBJECT:
-			return t.getInternalName();
-		case Type.BOOLEAN:
-		case Type.BYTE:
-		case Type.CHAR:
-		case Type.INT:
-		case Type.SHORT:
-			return Opcodes.INTEGER;
-		case Type.DOUBLE:
-			return Opcodes.DOUBLE;
-		case Type.FLOAT:
-			return Opcodes.FLOAT;
-		case Type.LONG:
-			return Opcodes.LONG;
-		case Type.VOID:
-			return Opcodes.NULL;
-		default:
-			throw new CoroutineGenerationException("Invalid frame opcode");
-		}
+		mv.visitInsn(Opcodes.POP);
 	}
 
-	private static Type getTypeFromFrameOpcode(Object opcode) {
-		if (opcode instanceof String) {
-			return Type.getObjectType((String) opcode);
+	private static void savestack(int frameIndex, Type[] stack, MethodVisitor mv) {
+		int top = stack.length - 1;
+		makeInt(stack.length, mv);
+		mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+		// stack: element array
+		for (int i = 0; i <= top; i++) {
+			Type stackType = stack[i];
+			int typeSort = stackType.getSort();
+			switch (typeSort) {
+			case Type.BOOLEAN:
+			case Type.CHAR:
+			case Type.BYTE:
+			case Type.SHORT:
+			case Type.INT:
+				mv.visitInsn(Opcodes.DUP_X1);
+				mv.visitInsn(Opcodes.SWAP);
+				box_int(typeSort, mv);
+				break;
+			case Type.FLOAT:
+				mv.visitInsn(Opcodes.DUP_X1);
+				mv.visitInsn(Opcodes.SWAP);
+				box_float(typeSort, mv);
+				break;
+			case Type.LONG:
+				mv.visitInsn(Opcodes.DUP_X2);
+				mv.visitInsn(Opcodes.DUP_X2);
+				mv.visitInsn(Opcodes.POP);
+				box_long(typeSort, mv);
+				break;
+			case Type.DOUBLE:
+				mv.visitInsn(Opcodes.DUP_X2);
+				mv.visitInsn(Opcodes.DUP_X2);
+				mv.visitInsn(Opcodes.POP);
+				box_double(typeSort, mv);
+				break;
+			case Type.ARRAY:
+			case Type.OBJECT:
+			case Type.VOID:
+				mv.visitInsn(Opcodes.DUP_X1);
+				mv.visitInsn(Opcodes.SWAP);
+				break;
+			}
+			// stack: array array element
+			makeInt(i, mv);
+			mv.visitInsn(Opcodes.SWAP);
+			// stack: array array int element
+			mv.visitInsn(Opcodes.AASTORE);
 		}
-		if (opcode instanceof Integer) {
-			if (opcode == Opcodes.INTEGER) {
-				return Type.INT_TYPE;
-			}
-			if (opcode == Opcodes.FLOAT) {
-				return Type.FLOAT_TYPE;
-			}
-			if (opcode == Opcodes.LONG) {
-				return Type.LONG_TYPE;
-			}
-			if (opcode == Opcodes.DOUBLE) {
-				return Type.DOUBLE_TYPE;
-			}
-			if (opcode == Opcodes.NULL) {
-				return Type.VOID_TYPE;
-			}
-		}
-		if (opcode instanceof Label) {
-			return null;
-		}
-
-		throw new CoroutineGenerationException("Invalid frame opcode");
+		mv.visitVarInsn(Opcodes.ALOAD, frameIndex);
+		mv.visitInsn(Opcodes.SWAP);
+		mv.visitMethodInsn(
+				Opcodes.INVOKEVIRTUAL,
+				FRAME_NAME,
+				"setOperands",
+				"([Ljava/lang/Object;)V");
 	}
 
 	@SuppressWarnings("unchecked")
@@ -120,8 +165,6 @@ final class MethodTransformer extends InstructionAdapter {
 	private TryCatchBlock				currentTryCatchBlock;
 
 	private final int					frame;
-
-	private Object[]					fullFramePrefix;
 
 	private final boolean				generateDebugCode;
 
@@ -137,26 +180,18 @@ final class MethodTransformer extends InstructionAdapter {
 
 	private final int					localsStartIndex;
 
-	private int							maxVariables;
-
-	private boolean						mergeFrames;
-
 	private final MethodProperties		methodProperties;
 
 	private final int					out;
 
-	private int							seenVariables;
-
 	private final Deque<Type>			stack			= new LinkedList<Type>();
-
-	private int							stackSize;
 
 	private final int					state;
 
+	private StackMapFramesAnalyzer		stm;
+
 	private final Deque<TryCatchBlock>	tryCatchBlocks	= new ArrayDeque<TryCatchBlock>(
 																2);
-
-	private TryCatchBlock				tryCatchHandler;
 
 	private final GrowthList			variables;
 
@@ -175,23 +210,19 @@ final class MethodTransformer extends InstructionAdapter {
 		this.methodProperties = methodProperties;
 		this.variables = new GrowthList(initialSize);
 		this.generateDebugCode = generateDebugCode;
-		this.seenVariables = argsLength;
 		if (methodProperties.isStatic()) {
-			this.frame = this.maxVariables = 0;
+			this.frame = 0;
 			this.in = 1;
 			this.out = 2;
 			this.state = 3;
 			this.localsArray = 4;
 		} else {
-			this.frame = this.maxVariables = 1;
+			this.frame = 1;
 			this.in = 2;
 			this.out = 3;
 			this.state = 4;
 			this.localsArray = 5;
-			variables.add(0, new VariableInfo(
-					0,
-					methodProperties.getOwner(),
-					true));
+			variables.add(new VariableInfo(methodProperties.getOwner(), true));
 		}
 		this.localsStartIndex = localsArray + 1;
 	}
@@ -201,7 +232,7 @@ final class MethodTransformer extends InstructionAdapter {
 		if (cst == null) {
 			stack.push(Type.VOID_TYPE);
 		} else {
-			stack.push(_JAVA_LANG_STRING);
+			stack.push(Types.JAVA_LANG_STRING);
 		}
 		super.aconst(cst);
 	}
@@ -243,7 +274,7 @@ final class MethodTransformer extends InstructionAdapter {
 		mv.visitInsn(Opcodes.POP);
 		stack.pop();
 		// next create exception and throw
-		throwex(EXCEPTION_RETURN, mv);
+		throwex("java/util/NoSuchElementException", mv);
 	}
 
 	@Override
@@ -577,8 +608,7 @@ final class MethodTransformer extends InstructionAdapter {
 		// if it is constructor we replace uninitialized memory reference with
 		// correct type
 		if (isConstructor) {
-			int maxPop = stack.size();
-			while (stack.peek() == null && maxPop-- > 0) {
+			if (stack.peek() == null) {
 				stack.pop();
 			}
 			stack.push(Type.getObjectType(owner));
@@ -618,7 +648,7 @@ final class MethodTransformer extends InstructionAdapter {
 				 * the caller in case of yield() overload
 				 */
 				if (Type.getArgumentTypes(desc).length != 0) {
-					input(in, stack.pop(), mv);
+					input();
 				}
 				/*
 				 * b) save remaining stack
@@ -635,54 +665,71 @@ final class MethodTransformer extends InstructionAdapter {
 									"It is not possible to yield with uninitialized memory on the stack. Probably you use construct such as: new A(..,yield,..). Please move yield call out of constructor");
 						}
 					}
-					int stackSize = savestack(frame, stackContents, mv);
-					this.stackSize = max(this.stackSize, stackSize);
+					savestack(frame, stackContents, mv);
 				}
 				/*
 				 * c) save locals and state
 				 */
-				savelocs(localsArray, varIterator(), mv);
-				savestate(frame, yieldIndex, mv);
-				this.stackSize = max(this.stackSize, 4);
+				saveLocals();
+				mv.visitVarInsn(Opcodes.ALOAD, frame);
+				makeInt(yieldIndex, mv);
+				mv.visitMethodInsn(
+						Opcodes.INVOKEVIRTUAL,
+						FRAME_NAME,
+						"setState",
+						"(I)V");
 				/*
 				 * d) jump to exit - in debug mode save line number
 				 */
 				if (generateDebugCode) {
-					saveline(frame, lineNumber, mv);
+					mv.visitVarInsn(Opcodes.ALOAD, frame);
+					makeInt(lineNumber, mv);
+					mv.visitMethodInsn(
+							Opcodes.INVOKEVIRTUAL,
+							FRAME_NAME,
+							"setLineOfCode",
+							"(I)V");
 				}
 				mv.visitJumpInsn(Opcodes.GOTO, yieldLabel);
 				/*
 				 * e) fix jump from switch statement
 				 */
 				mv.visitLabel(gotos[yieldIndex]);
-				makeYieldFrame();
+				stm.emitCleanFrame(mv);
 				/*
 				 * f) check if exit condition occurs, load locals, restore stack
+				 * and stack map
 				 */
-				loadexitstate(frame, mv);
+				mv.visitVarInsn(Opcodes.ALOAD, frame);
+				mv.visitMethodInsn(
+						Opcodes.INVOKEVIRTUAL,
+						FRAME_NAME,
+						"isCoroutineClosed",
+						"()Z");
 				Label continueHere = new Label();
 				mv.visitJumpInsn(Opcodes.IFEQ, continueHere);
-				throwex(EXCEPTION_EXIT, mv);
+				throwex("mr/go/coroutines/user/CoroutineExitException", mv);
 				mv.visitLabel(continueHere);
 				mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
-				getlocs(localsArray, varIterator(), mv);
+				restoreFrameState();
 				if (nonemptyStack) {
 					loadstack(frame, stackContents, mv);
 				}
+				if (!nonemptyStack && stm.getStackMapTop() != 0) {
+					// bug fix - when no insn is emitted in restoreFrameState()
+					// and stack is empty two frames are collapsed
+					stm.emitOldFrame(mv);
+				}
+				restoreTemporaryState();
 				// push "sent" value
 				mv.visitVarInsn(Opcodes.ALOAD, out);
-				stack.push(_JAVA_LANG_OBJECT);
+				stack.push(Types.JAVA_LANG_OBJECT);
 				/*
 				 * g) mark try catch block, if any
 				 */
 				if (currentTryCatchBlock != null) {
 					currentTryCatchBlock.hasYield = true;
 				}
-				/*
-				 * h) mark that future frame might need to be merged with yield
-				 * state
-				 */
-				mergeFrames = seenVariables != 0;
 			}
 			return;
 		}
@@ -717,22 +764,20 @@ final class MethodTransformer extends InstructionAdapter {
 
 	@Override
 	public void load(int var, Type type) {
-		// first seek updated variable index
-		if (var != 0 || methodProperties.isStatic()) {
-			var += variableIndexOffset;
-		}
-		// then load type on stack
+		// load type on stack
 		Type realType;
-		Object v = variables.get(var);
+		VariableInfo v = (VariableInfo) variables.get(var);
 		if (v != null) {
-			realType = ((VariableInfo) v).getType();
+			realType = v.getType();
 		} else {
 			// we might have a load instruction before we saw a variable.
 			realType = type;
-			variables.set(var, new VariableInfo(maxVariables, realType));
-			maxVariables += 1;
 		}
 		stack.push(realType);
+		// seek updated variable index
+		if (var != 0 || methodProperties.isStatic()) {
+			var += variableIndexOffset;
+		}
 		super.load(var, type);
 	}
 
@@ -784,28 +829,28 @@ final class MethodTransformer extends InstructionAdapter {
 		int typeSort = type.getSort();
 		switch (typeSort) {
 		case Type.INT:
-			stack.push(INT_ARRAY);
+			stack.push(Types.INT_ARRAY);
 			break;
 		case Type.BOOLEAN:
-			stack.push(BOOLEAN_ARRAY);
+			stack.push(Types.BOOLEAN_ARRAY);
 			break;
 		case Type.BYTE:
-			stack.push(BYTE_ARRAY);
+			stack.push(Types.BYTE_ARRAY);
 			break;
 		case Type.CHAR:
-			stack.push(CHAR_ARRAY);
+			stack.push(Types.CHAR_ARRAY);
 			break;
 		case Type.DOUBLE:
-			stack.push(DOUBLE_ARRAY);
+			stack.push(Types.DOUBLE_ARRAY);
 			break;
 		case Type.FLOAT:
-			stack.push(FLOAT_ARRAY);
+			stack.push(Types.FLOAT_ARRAY);
 			break;
 		case Type.LONG:
-			stack.push(LONG_ARRAY);
+			stack.push(Types.LONG_ARRAY);
 			break;
 		case Type.SHORT:
-			stack.push(SHORT_ARRAY);
+			stack.push(Types.SHORT_ARRAY);
 			break;
 		default:
 			String elementDescriptor = type.getDescriptor();
@@ -883,24 +928,26 @@ final class MethodTransformer extends InstructionAdapter {
 
 	@Override
 	public void store(int var, Type type) {
-		// translate var index
-		var += variableIndexOffset;
 		Type realType = stack.pop();
+		// check for long/double as the last variable
+		if (realType.getSize() == 2) {
+			variables.set(var + 1, null);
+		}
 		if (var >= variables.size()) {
-			variables.add(var, new VariableInfo(maxVariables, realType, true));
-			maxVariables += 1;
+			variables.set(var, new VariableInfo(realType));
 		} else {
 			VariableInfo varInfo = (VariableInfo) variables.get(var);
 			if (varInfo == null) {
-				varInfo = new VariableInfo(maxVariables, realType, true);
+				varInfo = new VariableInfo(realType);
 				variables.set(var, varInfo);
-				maxVariables += 1;
 			} else {
 				varInfo.setType(realType);
 				varInfo.setInitialized(true);
 				varInfo.setFinal(false);
 			}
 		}
+		// translate var index
+		var += variableIndexOffset;
 		super.store(var, type);
 	}
 
@@ -929,7 +976,7 @@ final class MethodTransformer extends InstructionAdapter {
 
 	@Override
 	public void tconst(Type type) {
-		stack.push(CLASS_TYPE);
+		stack.push(Types.CLASS_TYPE);
 		super.tconst(type);
 	}
 
@@ -943,12 +990,13 @@ final class MethodTransformer extends InstructionAdapter {
 
 	@Override
 	public AnnotationVisitor visitAnnotation(String desc, boolean visible) {
-		if (desc.equals(ClassAnalyzer.COROUTINE_DESCRIPTOR)) {
+		if (desc.equals(COROUTINE_DESCRIPTOR)) {
 			return new CoroutineAnnotationVisitor();
 		}
-		return super.visitAnnotation(desc, visible);
+		return null;
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public void visitCode() {
 		super.visitCode();
@@ -956,22 +1004,34 @@ final class MethodTransformer extends InstructionAdapter {
 		 * int state = frame.getState(); Object[] locals = frame.getLocals();
 		 */
 		{
-			loadstate(frame, mv);
+			mv.visitVarInsn(Opcodes.ALOAD, frame);
+			mv.visitMethodInsn(
+					Opcodes.INVOKEVIRTUAL,
+					FRAME_NAME,
+					"getState",
+					"()I");
 			mv.visitVarInsn(Opcodes.ISTORE, state);
-			loadlocs(frame, mv);
+			mv.visitVarInsn(Opcodes.ALOAD, frame);
+			mv.visitMethodInsn(
+					Opcodes.INVOKEVIRTUAL,
+					FRAME_NAME,
+					"getLocals",
+					"()[Ljava/lang/Object;");
 			mv.visitVarInsn(Opcodes.ASTORE, localsArray);
-			// locals: +2, stack: 1
 		}
 		/*
 		 * if (chkclosed) throw closed;
 		 */
 		{
 			mv.visitVarInsn(Opcodes.ILOAD, state);
-			chkclosed(mv);
+			mv.visitInsn(Opcodes.ICONST_M1);
+			Label exitBranch = new Label();
+			mv.visitJumpInsn(Opcodes.IF_ICMPNE, exitBranch);
+			throwex("mr/go/coroutines/user/CoroutineClosedException", mv);
+			mv.visitLabel(exitBranch);
 			// frame: [(this)?, frame, in, out, state, locals]
 			mv.visitFrame(Opcodes.F_APPEND, 2, new Object[]
-			{ Opcodes.INTEGER, OBJECT_ARRAY }, 0, null);
-			// locals: +0, stack: 2
+			{ Opcodes.INTEGER, "[Ljava/lang/Object;" }, 0, null);
 		}
 		Type[] argsTypes = methodProperties.getArgsTypes();
 		int argsLength = argsTypes.length;
@@ -981,50 +1041,77 @@ final class MethodTransformer extends InstructionAdapter {
 		 */
 		{
 			mv.visitVarInsn(Opcodes.ILOAD, state);
-			gotos = switchstate(maxYieldStatements + 1, mv);
-			// locals +0, stack : 2
+			Label defaultBranch = new Label();
+			Label[] labels = new Label[maxYieldStatements + 1];
+			gotos = new Label[maxYieldStatements + 1];
+			for (int i = 0; i <= maxYieldStatements; i++) {
+				labels[i] = new Label();
+				gotos[i] = new Label();
+			}
+			mv.visitTableSwitchInsn(
+					0,
+					maxYieldStatements,
+					defaultBranch,
+					labels);
+			for (int i = 0; i <= maxYieldStatements; i++) {
+				Label li = labels[i];
+				Label gotoi = gotos[i];
+				mv.visitLabel(li);
+				mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
+				mv.visitJumpInsn(Opcodes.GOTO, gotoi);
+			}
+			mv.visitLabel(defaultBranch);
+			mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
+			throwex("mr/go/coroutines/user/InvalidCoroutineException", mv);
+			mv.visitLabel(gotos[0]);
+			mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
 			getlocs(
 					localsArray,
 					localsStartIndex,
-					maxVariables,
+					(methodProperties.isStatic()) ? 0 : 1,
 					argsLength,
-					variables,
 					mv,
 					argsTypes);
-			loadexitstate(frame, mv);
+			// we can make all variables (arguments and this) final to avoid
+			// copying
+			// them
+			for (int i = 0; i < argsLength; i++) {
+				Type argType = argsTypes[i];
+				variables.add(new VariableInfo(argType, true));
+				if (argType.getSize() == 2) {
+					variables.add(null);
+				}
+			}
+			stm = new StackMapFramesAnalyzer(variables, stack, methodProperties
+					.getOwner()
+					.getInternalName(), methodProperties.isStatic(), argsLength);
+			mv.visitVarInsn(Opcodes.ALOAD, frame);
+			mv.visitMethodInsn(
+					Opcodes.INVOKEVIRTUAL,
+					FRAME_NAME,
+					"isCoroutineClosed",
+					"()Z");
 			Label continueHere = new Label();
 			mv.visitJumpInsn(Opcodes.IFEQ, continueHere);
-			throwex(EXCEPTION_CLOSED, mv);
+			throwex("mr/go/coroutines/user/CoroutineClosedException", mv);
 			mv.visitLabel(continueHere);
-			makeInitialFrame(argsLength, argsTypes);
+			stm.emitOldFrame(mv);
 			// add NOP in case that user code contains stack map here
 			mv.visitInsn(Opcodes.NOP);
-			// locals +args.length, stack : 2
-		}
-		maxVariables += argsLength;
-		stackSize = 2;
-		// we can make all variables (arguments and this) final to avoid copying
-		// them
-		for (Object v : variables) {
-			if (v != null) {
-				VariableInfo varInfo = (VariableInfo) v;
-				varInfo.setFinal(true);
-				varInfo.setTemporary(false);
-			}
 		}
 	}
 
 	@Override
 	public void visitEnd() {
 		super.visitEnd();
-		methodProperties.setMaxVariables(maxVariables);
+		methodProperties.setMaxVariables(variables.size());
 		if (generateDebugCode) {
-			String[] names = new String[maxVariables];
-			Iterator<VariableInfo> varIt = varIterator();
+			String[] names = new String[variables.size()];
+			ListIterator<VariableInfo> varIt = varIterator();
 			while (varIt.hasNext()) {
 				VariableInfo varInfo = varIt.next();
 				if (varInfo != null) {
-					names[varInfo.getLogicalIndex()] = varInfo.getName();
+					names[varIt.previousIndex()] = varInfo.getName();
 				}
 			}
 			if (!methodProperties.isStatic()) {
@@ -1041,154 +1128,24 @@ final class MethodTransformer extends InstructionAdapter {
 			Object[] local2,
 			int stack,
 			Object[] stack2) {
-		Object[] locals = local2;
-		int nLocal = local;
-		ListIterator<VariableInfo> varIterator;
-		VariableInfo varInfo;
-		switch (type) {
-		case Opcodes.F_FULL:
-			// we have to append our changes to locals
-			locals = appendFrame(local2, nLocal);
-			nLocal = locals.length;
-			seenVariables = nLocal - fullFramePrefix.length;
-			// then seek uninitialized variables in block marked by frame to
-			// reduce copying effort and mark remaining variables as final
-			varIterator = varIterator();
-			int localIndex = (methodProperties.isStatic()) ? 0 : 1;
-			for (; localIndex < local; localIndex++) {
-				Object opcode = local2[localIndex];
-				boolean uninitialized = opcode == Opcodes.TOP;
-				varInfo = varIterator.next();
-				if (varInfo != null) {
-					if (uninitialized) {
-						varInfo.setInitialized(false);
-					} else {
-						varInfo.setTemporary(false);
-					}
-				} else if (uninitialized) {
-					// set temporary variable
-					varIterator.set(new VariableInfo(maxVariables));
-					maxVariables += 1;
-				}
-				// move through category 2 variables
-				if (opcode == Opcodes.LONG || opcode == Opcodes.DOUBLE) {
-					if (varIterator.hasNext()) {
-						varIterator.next();
-					}
-				}
-			}
-			// variables not introduced in full frame are marked uninitialized
-			while (varIterator.hasNext()) {
-				varInfo = varIterator.next();
-				if (varInfo != null) {
-					varInfo.setInitialized(false);
-				}
-			}
-			// next we recreate stack for this block
-			this.stack.clear();
-			for (int i = 0; i < stack; i++) {
-				Object stackOpcode = stack2[i];
-				this.stack.push(getTypeFromFrameOpcode(stackOpcode));
-			}
-			// if it is yield exception handler, handle it
-			if (incomingExceptionHandler) {
-				incomingExceptionHandler = false;
-				makeExceptionFrame(stack2[0]);
-				return;
-			}
-			// since we are recreating frame anyway, merge is taken care of
-			// (unless it is a handler)
-			mergeFrames = false;
-			break;
-		case Opcodes.F_CHOP:
-			// we mark chopped variables as uninitialized to reduce copying
-			// effort
-			seenVariables -= nLocal;
-			varIterator = new ReverseListIterator(variables);
-			while (local > 0) {
-				Object v = varIterator.next();
-				if (v != null) {
-					varInfo = (VariableInfo) v;
-					varInfo.setInitialized(false);
-					if (!varInfo.isTemporary()) {
-						local--;
-					}
-				}
-			}
-			if (mergeFrames) {
-				makePostYieldFrame();
-				mergeFrames = false;
-				return;
-			}
-			break;
-		case Opcodes.F_SAME1:
-			dropTemporaryVariables();
-			this.stack.clear();
-			this.stack.push(getTypeFromFrameOpcode(stack2[0]));
-			// if this signals start of exception handler we will reload
-			// variables
-			if (incomingExceptionHandler) {
-				incomingExceptionHandler = false;
-				makeExceptionFrame(stack2[0]);
-				return;
-			}
-			if (mergeFrames) {
-				mergeFrames = false;
-				locals = createCoroutineFrameLocals();
-				if (locals.length != 0) {
-					locals = mergeFrame(locals);
-					super.visitFrame(
-							Opcodes.F_FULL,
-							locals.length,
-							locals,
-							1,
-							stack2);
-				} else {
-					super.visitFrame(Opcodes.F_SAME1, 0, null, 1, stack2);
-				}
-				return;
-			}
-			break;
-		case Opcodes.F_NEW:
-			throw new CoroutineGenerationException(
-					"Expanded frames not allowed");
-		case Opcodes.F_APPEND:
-			varIterator = varIterator();
-			int i = 0;
-			// move to the last seen variable
-			while (i < seenVariables) {
-				Object v = varIterator.next();
-				if (v != null) {
-					i++;
-				}
-			}
-			// append
-			while (local > 0) {
-				Object v = varIterator.next();
-				if (v != null) {
-					varInfo = (VariableInfo) v;
-					varInfo.setTemporary(false);
-					local--;
-				}
-			}
-			seenVariables += nLocal;
-			if (mergeFrames) {
-				makePostYieldFrame();
-				mergeFrames = false;
-				return;
-			}
-			break;
-		case Opcodes.F_SAME:
-			dropTemporaryVariables();
-			if (mergeFrames) {
-				makePostYieldFrame();
-				mergeFrames = false;
-				return;
-			}
+		if (incomingExceptionHandler) {
+			stm.emitCatchFrame((String) stack2[0], mv);
+			stm.nextFrame(type, local, local2, stack, stack2);
+			restoreFrameState();
+			stm.emitOldFrame(mv);
+			// restoreTemporaryState();
+			incomingExceptionHandler = false;
+			return;
 		}
-		super.visitFrame(type, nLocal, locals, stack, stack2);
+		stm.nextFrame(type, local, local2, stack, stack2);
+		if (type == Opcodes.F_FULL) {
+			stm.emitFullFrame(mv);
+			return;
+		}
+		super.visitFrame(type, local, local2, stack, stack2);
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public void visitLabel(Label label) {
 		TryCatchBlock currentBlock;
@@ -1221,10 +1178,8 @@ final class MethodTransformer extends InstructionAdapter {
 			 * if there is chance we will jump into this block check whether
 			 * handler is about to begin
 			 */
-			if (currentBlock.hasYield && currentBlock.handler == label) {
-				incomingExceptionHandler = true;
-				tryCatchHandler = currentBlock;
-			}
+			incomingExceptionHandler = currentBlock.hasYield
+										& currentBlock.handler == label;
 		} else if ((allBlocksAtLabel = blockLabels.getCollection(label)) != null) {
 			Iterator<TryCatchBlock> tryCatchIterator = allBlocksAtLabel
 					.iterator();
@@ -1234,36 +1189,12 @@ final class MethodTransformer extends InstructionAdapter {
 			 */
 			if (currentBlock.handler == label && currentBlock.hasYield) {
 				incomingExceptionHandler = true;
-				tryCatchHandler = currentBlock;
-			} else if (currentBlock.start == label) {
+			} else {
 				if (currentTryCatchBlock == null) {
 					currentTryCatchBlock = currentBlock;
-				} else {
-					tryCatchBlocks.push(currentTryCatchBlock);
-					currentTryCatchBlock = currentBlock;
 				}
-				/*
-				 * it is beginning of block, remember active variables and let
-				 * it wait for its end
-				 */
-				List<VariableInfo> blockVariables = currentTryCatchBlock.variables;
-				Iterator<VariableInfo> varIterator = varIterator();
-				while (varIterator.hasNext()) {
-					Object v = varIterator.next();
-					if (v != null) {
-						VariableInfo varInfo = (VariableInfo) v;
-						if (varInfo.isInitialized()) {
-							blockVariables.add(varInfo);
-						}
-					}
-				}
-				/*
-				 * see if it is try with many catch clauses
-				 */
 				while (tryCatchIterator.hasNext()) {
-					TryCatchBlock outerBlock = tryCatchIterator.next();
-					outerBlock.variables.addAll(blockVariables);
-					tryCatchBlocks.push(outerBlock);
+					tryCatchBlocks.push(tryCatchIterator.next());
 				}
 			}
 		}
@@ -1284,9 +1215,6 @@ final class MethodTransformer extends InstructionAdapter {
 			Label start,
 			Label end,
 			int index) {
-		if (index != 0 || methodProperties.isStatic()) {
-			index += variableIndexOffset;
-		}
 		if (generateDebugCode) {
 			VariableInfo variable = (VariableInfo) variables.get(index);
 			String oldName = variable.getName();
@@ -1296,25 +1224,28 @@ final class MethodTransformer extends InstructionAdapter {
 				variable.setName(oldName + '/' + name);
 			}
 		}
+		if (index != 0 || methodProperties.isStatic()) {
+			index += variableIndexOffset;
+		}
 		super.visitLocalVariable(name, desc, signature, start, end, index);
-
 	}
 
 	@Override
 	public void visitMaxs(int maxStack, int maxLocals) {
 		// seems to be the only way to be sure that bytecode ended
 		mv.visitLabel(yieldLabel);
-		makeFrameAfterUserCode();
+		stm.emitCleanFrame(mv);
 		mv.visitVarInsn(Opcodes.ALOAD, in);
 		mv.visitInsn(Opcodes.ARETURN);
 		for (int i = yieldIndex + 1; i < gotos.length; i++) {
 			mv.visitLabel(gotos[i]);
 		}
 		mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
-		throwex(EXCEPTION_INVALID, mv);
+		throwex("mr/go/coroutines/user/InvalidCoroutineException", mv);
 		// stack is either what we need, or what they need, whichever is bigger
 		// locals are what we added to theirs
-		super.visitMaxs(max(stackSize, maxStack), 5 + maxLocals);
+		// UPDATE: it is better to compute maxs using ASM
+		super.visitMaxs(maxStack, maxLocals);
 	}
 
 	@Override
@@ -1352,201 +1283,43 @@ final class MethodTransformer extends InstructionAdapter {
 		super.xor(type);
 	}
 
-	private Object[] appendFrame(Object[] frameLocals, int nLocals) {
-		int fullLocals = fullFramePrefix.length;
-		int frameLength;
-		int offset;
-		if (methodProperties.isStatic()) {
-			frameLength = nLocals + fullLocals;
-			offset = 0;
-		} else {
-			frameLength = nLocals + fullLocals - 1;
-			offset = 1;
-		}
-		Object[] locals = new Object[frameLength];
-		System.arraycopy(fullFramePrefix, 0, locals, 0, fullLocals);
-		System.arraycopy(frameLocals, offset, locals, fullLocals, nLocals
-																	- offset);
-		return locals;
-	}
-
-	private Object[] createCoroutineFrameLocals() {
-		if (seenVariables == 0) {
-			return new Object[0];
-		}
-		Object[] coroutineFramePart = new Object[seenVariables];
-		Iterator<VariableInfo> varIterator = varIterator();
-		VariableInfo varInfo;
-		Object v;
-		int varIndex = 0;
-		while (varIndex < seenVariables) {
-			v = varIterator.next();
-			if (v == null) {
-				continue;
-			}
-			varInfo = (VariableInfo) v;
-			if (varInfo.isInitialized() && !varInfo.isTemporary()) {
-				coroutineFramePart[varIndex] = getFrameOpcode(varInfo.getType());
-			} else {
-				coroutineFramePart[varIndex] = Opcodes.TOP;
-			}
-			varIndex++;
-		}
-		return coroutineFramePart;
-	}
-
-	private void dropTemporaryVariables() {
-		int count = seenVariables;
-		if (count == 0) {
-			return;
-		}
-		Iterator<VariableInfo> iterator = varIterator();
-		VariableInfo varInfo;
-		while (count > 0) {
-			varInfo = iterator.next();
-			if (varInfo != null) {
-				if (varInfo.isTemporary()) {
-					varInfo.setInitialized(false);
-				}
-				count--;
+	private void getSingleLocal(int index) {
+		Object v = variables.get(index);
+		if (v != null) {
+			VariableInfo varInfo = (VariableInfo) v;
+			if (varInfo.isInitialized()) {
+				getloc(localsArray, index + variableIndexOffset, index, varInfo
+						.getType(), mv);
 			}
 		}
 	}
 
-	private void makeExceptionFrame(Object exception) {
-		List<VariableInfo> blockVariables = tryCatchHandler.variables;
-		int varsLength = blockVariables.size();
-		if (varsLength == 0) {
-			mv.visitFrame(Opcodes.F_SAME1, 0, null, 1, new Object[]
-			{ exception });
-		} else {
-			mv.visitFrame(
-					Opcodes.F_FULL,
-					fullFramePrefix.length,
-					fullFramePrefix,
-					1,
-					new Object[]
-					{ exception });
-			for (VariableInfo varInfo : blockVariables) {
-				getloc(localsArray, variables.indexOf(varInfo) /*
-																 * TODO: this
-																 * might be
-																 * slow, see if
-																 * we can
-																 * optimize
-																 */, varInfo
-						.getLogicalIndex(), varInfo.getType(), mv);
-			}
+	private void input() {
+		Type type = stack.pop();
+		int typeSort = type.getSort();
+		switch (typeSort) {
+		case Type.BOOLEAN:
+		case Type.CHAR:
+		case Type.BYTE:
+		case Type.SHORT:
+		case Type.INT:
+			box_int(typeSort, mv);
+			break;
+		case Type.FLOAT:
+			box_float(typeSort, mv);
+			break;
+		case Type.LONG:
+			box_long(typeSort, mv);
+			break;
+		case Type.DOUBLE:
+			box_double(typeSort, mv);
+			break;
+		case Type.ARRAY:
+		case Type.OBJECT:
+		case Type.VOID:
+			break;
 		}
-		tryCatchHandler = null;
-		mergeFrames = true;
-	}
-
-	private void makeFrameAfterUserCode() {
-		mv.visitFrame(
-				Opcodes.F_FULL,
-				fullFramePrefix.length,
-				fullFramePrefix,
-				0,
-				new Object[0]);
-	}
-
-	private void makeInitialFrame(int argsLength, Type[] argsTypes) {
-		int frameSize = argsLength;
-		int coroutineLocalsLength;
-		Object[] locals;
-		if (methodProperties.isStatic()) {
-			locals = new Object[frameSize + 5];
-			locals[0] = FRAME_NAME;
-			locals[1] = OBJECT;
-			locals[2] = OBJECT;
-			locals[3] = Opcodes.INTEGER;
-			locals[4] = OBJECT_ARRAY;
-			coroutineLocalsLength = 5;
-		} else {
-			locals = new Object[frameSize + 6];
-			locals[0] = methodProperties.getOwner().getInternalName();
-			locals[1] = FRAME_NAME;
-			locals[2] = OBJECT;
-			locals[3] = OBJECT;
-			locals[4] = Opcodes.INTEGER;
-			locals[5] = OBJECT_ARRAY;
-			coroutineLocalsLength = 6;
-		}
-		for (int i = 0; i < argsLength; i++) {
-			locals[i + coroutineLocalsLength] = getFrameOpcode(argsTypes[i]);
-		}
-		if (frameSize == 0) {
-			mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
-		} else if (frameSize <= 3) {
-			Object[] appendedPart = Arrays.copyOfRange(
-					locals,
-					coroutineLocalsLength,
-					locals.length);
-			mv.visitFrame(Opcodes.F_APPEND, frameSize, appendedPart, 0, null);
-		} else {
-			mv.visitFrame(
-					Opcodes.F_FULL,
-					locals.length,
-					locals,
-					0,
-					new Object[0]);
-		}
-		if (argsLength == 0) {
-			fullFramePrefix = locals;
-		} else {
-			fullFramePrefix = Arrays.copyOf(locals, coroutineLocalsLength);
-		}
-	}
-
-	private void makePostYieldFrame() {
-		Object[] coroutineFramePart = createCoroutineFrameLocals();
-		int varCount = coroutineFramePart.length;
-		if (varCount == 0) {
-			mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
-		} else if (varCount <= 3) {
-			mv.visitFrame(
-					Opcodes.F_APPEND,
-					varCount,
-					coroutineFramePart,
-					0,
-					new Object[0]);
-		} else {
-			Object[] locals = mergeFrame(coroutineFramePart);
-			mv.visitFrame(
-					Opcodes.F_FULL,
-					locals.length,
-					locals,
-					0,
-					new Object[0]);
-		}
-	}
-
-	private void makeYieldFrame() {
-		if (mergeFrames) {
-			mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
-			return;
-		}
-		if (seenVariables == 0) {
-			mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
-		} else if (seenVariables <= 3) {
-			mv.visitFrame(Opcodes.F_CHOP, seenVariables, null, 0, null);
-		} else {
-			mv.visitFrame(
-					Opcodes.F_FULL,
-					fullFramePrefix.length,
-					fullFramePrefix,
-					0,
-					new Object[0]);
-		}
-	}
-
-	private Object[] mergeFrame(Object[] frame) {
-		int nLocals = frame.length;
-		Object[] locals = new Object[fullFramePrefix.length + nLocals];
-		System.arraycopy(fullFramePrefix, 0, locals, 0, fullFramePrefix.length);
-		System.arraycopy(frame, 0, locals, fullFramePrefix.length, nLocals);
-		return locals;
+		mv.visitVarInsn(Opcodes.ASTORE, in);
 	}
 
 	private void methodCall(int argsLength, String desc) {
@@ -1559,13 +1332,47 @@ final class MethodTransformer extends InstructionAdapter {
 		}
 	}
 
-	private ListIterator<VariableInfo> varIterator() {
-		// iterate over variables after "locals array"
-		int variablesSize = variables.size();
-		if (localsStartIndex > variablesSize) {
-			return variables.listIterator(variablesSize);
+	private void restoreFrameState() {
+		// restore saved locals
+		int top = stm.getStackMapTop();
+		int varIndex = methodProperties.isStatic() ? 0 : 1;
+		while (varIndex < top) {
+			getSingleLocal(varIndex++);
 		}
-		return variables.listIterator(localsStartIndex);
+	}
+
+	private void restoreTemporaryState() {
+		// restore temporary locals - that is, not present in the frame yet
+		// initialized
+		int top = variables.size();
+		int varIndex = stm.getStackMapTop();
+		while (varIndex < top) {
+			getSingleLocal(varIndex++);
+		}
+	}
+
+	private void saveLocals() {
+		int varIndex;
+		ListIterator<VariableInfo> varIterator = varIterator();
+		while (varIterator.hasNext()) {
+			VariableInfo varInfo = varIterator.next();
+			if (varInfo != null && varInfo.isInitialized()
+				&& !varInfo.isFinal()) {
+				varIndex = varIterator.previousIndex();
+				saveloc(
+						localsArray,
+						varIndex + variableIndexOffset,
+						varIndex,
+						varInfo.getType(),
+						mv);
+				varInfo.setFinal(true);
+			}
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private ListIterator<VariableInfo> varIterator() {
+		return variables.listIterator(methodProperties.isStatic() ? 0 : 1);
 	}
 
 	private class CoroutineAnnotationVisitor implements AnnotationVisitor {
@@ -1603,20 +1410,17 @@ final class MethodTransformer extends InstructionAdapter {
 		public void visitEnum(String name, String desc, String value) {
 			// none defined
 		}
-
 	}
 
 	private static class TryCatchBlock {
 
-		private final Label					end;
+		private final Label	end;
 
-		private final Label					handler;
+		private final Label	handler;
 
-		private boolean						hasYield;
+		private boolean		hasYield;
 
-		private final Label					start;
-
-		private final List<VariableInfo>	variables	= new LinkedList<VariableInfo>();
+		private final Label	start;
 
 		public TryCatchBlock(
 				Label start,
@@ -1626,35 +1430,7 @@ final class MethodTransformer extends InstructionAdapter {
 			this.end = end;
 			this.handler = handler;
 		}
-
 	}
-
-	public static final Type	BOOLEAN_ARRAY		= Type
-															.getType(boolean[].class);
-
-	public static final Type	BYTE_ARRAY			= Type
-															.getType(byte[].class);
-
-	public static final Type	CHAR_ARRAY			= Type
-															.getType(char[].class);
-
-	public static final Type	CLASS_TYPE			= Type.getType(Class.class);
-
-	public static final String	COROUTINES_NAME		= "mr/go/coroutines/user/Coroutines";
-
-	public static final Type	DOUBLE_ARRAY		= Type
-															.getType(double[].class);
-
-	public static final Type	FLOAT_ARRAY			= Type
-															.getType(float[].class);
-
-	public static final Type	INT_ARRAY			= Type.getType(int[].class);
-
-	public static final Type	LONG_ARRAY			= Type
-															.getType(long[].class);
-
-	public static final Type	SHORT_ARRAY			= Type
-															.getType(short[].class);
 
 	private static final int	maxYieldStatements	= Integer
 															.parseInt(System
@@ -1663,5 +1439,4 @@ final class MethodTransformer extends InstructionAdapter {
 																			"8"));
 
 	private static final int	variableIndexOffset	= 5;
-
 }
