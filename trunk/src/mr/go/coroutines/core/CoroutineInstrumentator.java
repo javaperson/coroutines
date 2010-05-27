@@ -1,19 +1,18 @@
 /*
  * Copyright [2009] [Marcin Rzeźnicki]
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
  */
-
 package mr.go.coroutines.core;
 
 import java.io.BufferedOutputStream;
@@ -127,11 +126,11 @@ final class CoroutineInstrumentator implements ClassFileTransformer {
 
 	private boolean		runPreVerification;
 
-	public CoroutineInstrumentator() {
+	CoroutineInstrumentator() {
 		this(false, false, false, false, false, false);
 	}
 
-	public CoroutineInstrumentator(
+	CoroutineInstrumentator(
 			boolean generateDebugCode,
 			boolean printCode,
 			boolean preVerify,
@@ -147,7 +146,7 @@ final class CoroutineInstrumentator implements ClassFileTransformer {
 		this.overrideFrames = overrideFrames;
 	}
 
-	public CoroutineInstrumentator(
+	CoroutineInstrumentator(
 			String[] coroutineEnabledClassnames) {
 		this(
 				coroutineEnabledClassnames,
@@ -159,7 +158,7 @@ final class CoroutineInstrumentator implements ClassFileTransformer {
 				false);
 	}
 
-	public CoroutineInstrumentator(
+	CoroutineInstrumentator(
 			String[] coroutineEnabledClassnames,
 			boolean generateDebugCode,
 			boolean printCode,
@@ -168,6 +167,23 @@ final class CoroutineInstrumentator implements ClassFileTransformer {
 			boolean outputBin,
 			boolean overrideFrames) {
 		int classesLength = coroutineEnabledClassnames.length;
+		if (coroutinePackage != null) {
+			String[] classnamesWithPackage = new String[classesLength];
+			for (int i = 0; i < classesLength; i++) {
+				classnamesWithPackage[i] = coroutinePackage + '.'
+											+ coroutineEnabledClassnames[i];
+			}
+			coroutineEnabledClassnames = Arrays.copyOf(
+					coroutineEnabledClassnames,
+					2 * classesLength);
+			System.arraycopy(
+					classnamesWithPackage,
+					0,
+					coroutineEnabledClassnames,
+					classesLength,
+					classesLength);
+			classesLength *= 2;
+		}
 		Arrays.sort(coroutineEnabledClassnames);
 		this.coroutineEnabledClassnames = coroutineEnabledClassnames;
 		this.debugMode = new boolean[classesLength];
@@ -244,23 +260,19 @@ final class CoroutineInstrumentator implements ClassFileTransformer {
 			return null;
 		}
 		List<MethodId> coroutineMethodsInCurrentClass;
-		ClassReader asmClassReader = new ClassReader(classfileBuffer);
 		int classnameIndex = -1;
-		if (detectCoroutineClasses) {
-			ClassAnalyzer analyzer = new ClassAnalyzer();
-			asmClassReader.accept(analyzer, DETECT_STRUCTURE);
-			coroutineMethodsInCurrentClass = analyzer.getCoroutineMethods();
-		} else {
+		if (!detectCoroutineClasses) {
 			classnameIndex = Arrays.binarySearch(
 					coroutineEnabledClassnames,
 					className);
 			if (classnameIndex < 0) {
 				return null;
 			}
-			ClassAnalyzer analyzer = new ClassAnalyzer();
-			asmClassReader.accept(analyzer, DETECT_STRUCTURE);
-			coroutineMethodsInCurrentClass = analyzer.getCoroutineMethods();
 		}
+		ClassReader asmClassReader = new ClassReader(classfileBuffer);
+		ClassAnalyzer analyzer = new ClassAnalyzer();
+		asmClassReader.accept(analyzer, DETECT_STRUCTURE);
+		coroutineMethodsInCurrentClass = analyzer.getCoroutineMethods();
 		if (coroutineMethodsInCurrentClass.isEmpty()) {
 			return null;
 		}
@@ -291,7 +303,8 @@ final class CoroutineInstrumentator implements ClassFileTransformer {
 		}
 		ClassWriter asmClassWriter = new ClassWriter(
 				asmClassReader,
-				(asmComputeFrames) ? ClassWriter.COMPUTE_FRAMES : 0);
+				((asmComputeFrames) ? ClassWriter.COMPUTE_FRAMES : 0)
+						| ClassWriter.COMPUTE_MAXS);
 		ClassVisitor cv;
 		byte[] instrumentedClassContents;
 		try {
@@ -342,7 +355,6 @@ final class CoroutineInstrumentator implements ClassFileTransformer {
 			return null;
 		}
 		return instrumentedClassContents;
-
 	}
 
 	private static class ClosingTraceClassVisitor extends TraceClassVisitor {
@@ -365,6 +377,9 @@ final class CoroutineInstrumentator implements ClassFileTransformer {
 																	"mr.go.coroutines.ClassgenPath",
 																	".");
 
+	private static final String	coroutinePackage	= System
+															.getProperty("mr.go.coroutines.DefaultPackage");
+
 	private static final int	DETECT_STRUCTURE	= ClassReader.SKIP_CODE
 														| ClassReader.SKIP_DEBUG
 														| ClassReader.SKIP_FRAMES;
@@ -376,5 +391,4 @@ final class CoroutineInstrumentator implements ClassFileTransformer {
 															.getProperty(
 																	"mr.go.coroutines.PrintPath",
 																	".");
-
 }

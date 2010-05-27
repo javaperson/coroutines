@@ -13,7 +13,6 @@
    See the License for the specific language governing permissions and
    limitations under the License.
  */
-
 package mr.go.coroutines.core;
 
 abstract class ThreadLocalCoIterator<E, A> extends CoIteratorInternal<E, A> {

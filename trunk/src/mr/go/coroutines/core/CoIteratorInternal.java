@@ -1,29 +1,30 @@
 /*
  * Copyright [2009] [Marcin Rzeźnicki]
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
  */
-
 package mr.go.coroutines.core;
 
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 import mr.go.coroutines.user.CoIterator;
+import mr.go.coroutines.user.Controler;
 import mr.go.coroutines.user.CoroutineClosedException;
 import mr.go.coroutines.user.CoroutineExitException;
 import mr.go.coroutines.user.ExitCondition;
 import mr.go.coroutines.user.ExitOnYieldedEqualsTo;
+import mr.go.coroutines.user.StaticPattern;
 
 abstract class CoIteratorInternal<E, A> implements CoIterator<E, A> {
 
@@ -61,7 +62,7 @@ abstract class CoIteratorInternal<E, A> implements CoIterator<E, A> {
 	@Override
 	public java.lang.Iterable<E> till(E e) {
 		return new CoIterableWithExitCondition(new ExitOnYieldedEqualsTo<E>(e));
-	};
+	}
 
 	@Override
 	public Iterable<E> till(ExitCondition<E> condition) {
@@ -74,6 +75,16 @@ abstract class CoIteratorInternal<E, A> implements CoIterator<E, A> {
 			throw new IllegalArgumentException("count < 0");
 		}
 		return new CountingCoIterable(count);
+	}
+
+	@Override
+	public Iterable<E> with(Controler<E, A> controler) {
+		return new ControlingCoIterable(controler);
+	}
+
+	@Override
+	public Iterable<E> withPattern(A... toSend) {
+		return new ControlingCoIterable(new StaticPattern<E, A>(toSend));
 	}
 
 	protected abstract E call(Frame frame, A a);
@@ -110,7 +121,6 @@ abstract class CoIteratorInternal<E, A> implements CoIterator<E, A> {
 				public void remove() {
 					throw new UnsupportedOperationException();
 				}
-
 			};
 		}
 
@@ -123,7 +133,6 @@ abstract class CoIteratorInternal<E, A> implements CoIterator<E, A> {
 				hasNext = false;
 			}
 		}
-
 	}
 
 	private class CoIterableWithExitCondition extends CoIterable {
@@ -143,6 +152,35 @@ abstract class CoIteratorInternal<E, A> implements CoIterator<E, A> {
 				if (!hasNext) {
 					close();
 				}
+			}
+		}
+	}
+
+	private class ControlingCoIterable extends CoIterable {
+
+		private final Controler<E, A>	controler;
+
+		private A						toSend;
+
+		public ControlingCoIterable(
+				Controler<E, A> controler) {
+			this.controler = controler;
+			toSend = controler.init();
+		}
+
+		@Override
+		protected void fetchNext() {
+			try {
+				e = send(toSend);
+				toSend = controler.respondTo(e);
+			} catch (NoSuchElementException e) {
+				controler.noNextElement();
+				hasNext = false;
+			} catch (CoroutineClosedException e) {
+				controler.closed();
+				hasNext = false;
+			} catch (IllegalStateException e) {
+				hasNext = false;
 			}
 		}
 	}
@@ -168,5 +206,4 @@ abstract class CoIteratorInternal<E, A> implements CoIterator<E, A> {
 			}
 		}
 	}
-
 }

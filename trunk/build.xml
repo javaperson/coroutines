@@ -1,17 +1,20 @@
 <project name="coroutines" default="agent" basedir=".">
-	<property name="version" value="v1_0e" />
+	<property name="version" value="v1_1" />
 	<property name="revision" value="" />
 	<property name="src" value="src" />
 	<property name="doc" value="doc" />
 	<property name="dist" value="dist" />
 	<property name="lib" value="lib" />
 	<property name="zip" value="zip" />
-	<property name="bin" value="bin" />
+	<property name="bin" value="bin/classes" />
+	<property name="tests" value="tests" />
+	<property name="generated" value="bin/generated" />
 	<property name="jarfile" value="${dist}/coroutines_user_${version}${revision}.jar" />
 	<property name="agentjar" value="${dist}/coroutines.jar" />
-	<property name="classgenPath" value="./gen_tests" />
-	<property name="printPath" value="./traces" />
-	<property name="agentopts" value=";-outputbin" />
+	<property name="agentjar-tests" value="${dist}/coroutines-test.jar" />
+	<property name="classgenPath" value="bin/generated" />
+	<property name="printPath" value="bin/generated_source" />
+	<property name="agentopts" value=";-print,debug,postverify,outputbin" />
 
 	<target name="build" description="compilation">
 		<mkdir dir="${bin}" />
@@ -22,16 +25,25 @@
 				</fileset>
 			</classpath>
 		</javac>
+		<copy file="${src}/mr/go/coroutines/core/testsuite/test.logging.properties" todir="${bin}/mr/go/coroutines/core/testsuite" />
 	</target>
 
-	<target name="test" depends="agent" description="runs tests">
+
+
+	<target name="test" depends="build,agent" description="runs tests">
 		<mkdir dir="${classgenPath}" />
 		<mkdir dir="${printPath}" />
-		<junit printsummary="yes" fork="yes">
+		<java fork="yes" classname="mr.go.coroutines.core.testsuite.TestSuite" failonerror="yes">
+			<arg value="ExceptionHandlersTest" />
+			<arg value="SimpleLoopsTest" />
+			<arg value="Category2Test" />
+			<arg value="EsotericTest" />
 			<jvmarg value="-XX:-FailOverToOldVerifier" />
 			<jvmarg value="-Dmr.go.coroutines.ClassgenPath=${classgenPath}" />
 			<jvmarg value="-Dmr.go.coroutines.PrintPath=${printPath}" />
-			<jvmarg value="-javaagent:${agentjar}=mr.go.coroutines.tests.classes.NumberGenerator;mr.go.coroutines.tests.classes.PeopleDb;mr.go.coroutines.tests.classes.Betting;mr.go.coroutines.tests.classes.Grep;mr.go.coroutines.tests.classes.LinePrinter;mr.go.coroutines.tests.classes.LineCounter;mr.go.coroutines.tests.classes.LineWriter;mr.go.coroutines.tests.classes.Tree;mr.go.coroutines.tests.classes.Decoder;mr.go.coroutines.tests.classes.StringReceiver;mr.go.coroutines.tests.classes.TelegramReceiver${agentopts}" />
+			<jvmarg value="-Dmr.go.coroutines.DefaultPackage=mr.go.coroutines.core.testsuite" />
+			<jvmarg value="-Djava.util.logging.config.file=${bin}/mr/go/coroutines/core/testsuite/test.logging.properties" />
+			<jvmarg value="-javaagent:${agentjar}=ExceptionHandlersTest;SimpleLoopsTest;Category2Test;EsotericTest${agentopts}" />
 			<classpath>
 				<pathelement location="${bin}" />
 				<pathelement location="${classgenPath}" />
@@ -39,10 +51,7 @@
 					<include name="*.jar" />
 				</fileset>
 			</classpath>
-			<formatter type="plain" />
-			<test name="mr.go.coroutines.tests.CoroutineTests" haltonfailure="no">
-			</test>
-		</junit>
+		</java>
 	</target>
 
 	<target name="jar" depends="build" description="creates jar library">
@@ -59,6 +68,7 @@
 		<jar destfile="${agentjar}">
 			<fileset dir="${bin}">
 				<include name="mr/go/coroutines/core/**" />
+				<exclude name="mr/go/coroutines/core/testing/**" />
 			</fileset>
 			<manifest>
 				<attribute name="Premain-Class" value="mr.go.coroutines.core.CoroutineAgent" />
@@ -69,23 +79,27 @@
 	<target name="clean" description="deletes all artifacts">
 		<delete file="${jarfile}" />
 		<delete file="${agentjar}" />
+		<delete file="${agentjar-tests}" />
 		<delete dir="${dist}" />
 		<delete dir="${zip}" />
 		<delete dir="${bin}" />
 		<delete dir="${doc}" />
+		<delete dir="${src-tests}" />
 		<delete dir="${classgenPath}" />
 		<delete dir="${printPath}" />
+		<mkdir dir="${classgenPath}" />
 	</target>
 
 	<target name="javadoc">
 		<javadoc access="public" author="true" source="1.6" destdir="${doc}" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" packagenames="mr.go.coroutines.user" sourcepath="src" splitindex="true" use="true" version="false" />
 	</target>
 
-	<target depends="clean,jar,agent,javadoc" name="zip">
+	<target depends="jar,agent,javadoc" name="zip">
 		<mkdir dir="${zip}" />
 		<zip destfile="${zip}/coroutines_${version}${revision}.zip">
 			<zipfileset file="${jarfile}" />
 			<zipfileset file="${agentjar}" />
+			<zipfileset dir="examples" prefix="examples" />
 			<zipfileset dir="doc" prefix="doc" />
 			<zipfileset dir="lib" prefix="lib" />
 			<zipfileset file="LICENSE.txt" />
@@ -94,8 +108,8 @@
 		<zip destfile="${zip}/coroutines_${version}${revision}_src.zip">
 			<zipfileset file="${jarfile}" />
 			<zipfileset file="${agentjar}" />
-			<zipfileset file="licence.txt" />
 			<zipfileset dir="src" prefix="src" />
+			<zipfileset dir="examples" prefix="examples" />
 			<zipfileset dir="lib" prefix="lib" />
 			<zipfileset dir="doc" prefix="doc" />
 			<zipfileset file="build.xml" />
