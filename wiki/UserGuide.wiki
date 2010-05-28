@@ -299,3 +299,23 @@ Sometimes you might prefer to work with standard Java iterator instead. For exam
 		return !t1Leaves.hasNext() && !t2Leaves.hasNext();
 	}
 }}}
+
+== Coroutine with Controler ==
+ 
+Starting from 1.1 version there is another possibility of use coroutine as an `Iterable`, particularly aimed at coroutines that are not simple generators but expect that caller sends them something in response to an yield. For this use case users are encouraged to use `Controler` interface with `CoIterator`'s `with` or, if the execution pattern is static, `withPattern` method. As an example, `TelegramReceiver` found in the previous paragraph may be rewritten  as:
+{{{
+		TelegramReceiver tg = new TelegramReceiver();
+		List<Telegram> telegrams = new LinkedList<Telegram>();
+		for (Telegram t : tg.receiver(telegrams).withPattern(
+				"Hello",
+				"STOP",
+				"How",
+				"STOP",
+				"do",
+				"STOP",
+				"you",
+				"STOP",
+				"do?",...)) {
+			...
+		}
+}}}
