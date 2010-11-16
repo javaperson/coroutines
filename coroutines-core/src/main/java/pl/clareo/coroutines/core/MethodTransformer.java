@@ -595,13 +595,9 @@ final class MethodTransformer implements Opcodes {
                         case Type.VOID:
                             return NULL_VALUE;
                         case Type.BOOLEAN:
-                            return BOOLEAN_VALUE;
                         case Type.CHAR:
-                            return CHAR_VALUE;
                         case Type.BYTE:
-                            return BYTE_VALUE;
                         case Type.SHORT:
-                            return SHORT_VALUE;
                         case Type.INT:
                             return BasicValue.INT_VALUE;
                         case Type.FLOAT:
