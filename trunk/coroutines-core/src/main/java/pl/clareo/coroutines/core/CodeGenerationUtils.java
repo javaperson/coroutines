@@ -64,20 +64,22 @@ final class CodeGenerationUtils implements Opcodes {
             result.add(new VarInsnNode(ILOAD, varIndex));
         }
         switch (typeSort) {
+            /*
+             * case Type.BOOLEAN: result.add(new MethodInsnNode(INVOKESTATIC,
+             * "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;"));
+             * break; case Type.CHAR: result.add(new
+             * MethodInsnNode(INVOKESTATIC, "java/lang/Character", "valueOf",
+             * "(C)Ljava/lang/Character;")); break; case Type.BYTE:
+             * result.add(new MethodInsnNode(INVOKESTATIC, "java/lang/Byte",
+             * "valueOf", "(B)Ljava/lang/Byte;")); break; case Type.SHORT:
+             * result.add(new MethodInsnNode(INVOKESTATIC, "java/lang/Short",
+             * "valueOf", "(S)Ljava/lang/Short;")); break;
+             */
             case Type.BOOLEAN:
-                result.add(new MethodInsnNode(INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;"));
-            break;
             case Type.CHAR:
-                result.add(new MethodInsnNode(INVOKESTATIC, "java/lang/Character", "valueOf",
-                                              "(C)Ljava/lang/Character;"));
-            break;
             case Type.BYTE:
-                result.add(new MethodInsnNode(INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;"));
-            break;
-            case Type.SHORT:
-                result.add(new MethodInsnNode(INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;"));
-            break;
             case Type.INT:
+            case Type.SHORT:
                 result.add(new MethodInsnNode(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;"));
             break;
             default:
@@ -293,22 +295,25 @@ final class CodeGenerationUtils implements Opcodes {
     static InsnList unbox_int(int varIndex, int typeSort) {
         InsnList insn = new InsnList();
         switch (typeSort) {
+            /*
+             * case Type.BOOLEAN: insn.add(new TypeInsnNode(CHECKCAST,
+             * "java/lang/Boolean")); insn.add(new MethodInsnNode(INVOKEVIRTUAL,
+             * "java/lang/Boolean", "booleanValue", "()Z")); break; case
+             * Type.CHAR: insn.add(new TypeInsnNode(CHECKCAST,
+             * "java/lang/Character")); insn.add(new
+             * MethodInsnNode(INVOKEVIRTUAL, "java/lang/Character", "charValue",
+             * "()C")); break; case Type.BYTE: insn.add(new
+             * TypeInsnNode(CHECKCAST, "java/lang/Byte")); insn.add(new
+             * MethodInsnNode(INVOKEVIRTUAL, "java/lang/Byte", "byteValue",
+             * "()B")); break; case Type.SHORT: insn.add(new
+             * TypeInsnNode(CHECKCAST, "java/lang/Short")); insn.add(new
+             * MethodInsnNode(INVOKEVIRTUAL, "java/lang/Short", "shortValue",
+             * "()S")); break;
+             */
             case Type.BOOLEAN:
-                insn.add(new TypeInsnNode(CHECKCAST, "java/lang/Boolean"));
-                insn.add(new MethodInsnNode(INVOKEVIRTUAL, "java/lang/Boolean", "booleanValue", "()Z"));
-            break;
             case Type.CHAR:
-                insn.add(new TypeInsnNode(CHECKCAST, "java/lang/Character"));
-                insn.add(new MethodInsnNode(INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C"));
-            break;
             case Type.BYTE:
-                insn.add(new TypeInsnNode(CHECKCAST, "java/lang/Byte"));
-                insn.add(new MethodInsnNode(INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B"));
-            break;
             case Type.SHORT:
-                insn.add(new TypeInsnNode(CHECKCAST, "java/lang/Short"));
-                insn.add(new MethodInsnNode(INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S"));
-            break;
             case Type.INT:
                 insn.add(new TypeInsnNode(CHECKCAST, "java/lang/Integer"));
                 insn.add(new MethodInsnNode(INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I"));
