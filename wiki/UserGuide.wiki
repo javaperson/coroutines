@@ -60,7 +60,7 @@ For agent to work you need following libraries on your classpath:
 
 To write any coroutine you also need coroutine user library (*coroutines_user_xxx.jar*) to be found on classpath.
 
-To use generated coroutines some run-time generated classes are also needed. All such classes are written on disk in directory passed in `mr.go.coroutines.ClassgenPath` system property. You must have this directory in your classpath also. 
+To use generated coroutines some run-time generated classes are also needed. All such classes are written on disk in directory passed in ~~  `mr.go.coroutines.ClassgenPath` ~~  `pl.clareo.coroutines.ClassgenPath` system property. You must have this directory in your classpath also. 
 
 == Java version ==
 
